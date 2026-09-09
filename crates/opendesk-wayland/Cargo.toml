@@ -1,0 +1,28 @@
+[package]
+name = "opendesk-wayland"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+opendesk-proto = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { version = "1.53", default-features = false, features = ["sync"] }
+wayland-client = { workspace = true }
+wayland-protocols = { workspace = true }
+wayland-protocols-wlr = { workspace = true }
+wayland-protocols-misc = { workspace = true }
+smithay-client-toolkit = { workspace = true }
+calloop = { workspace = true }
+calloop-wayland-source = { workspace = true }
+xkbcommon = { workspace = true }
+memmap2 = { workspace = true }
+rustix = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

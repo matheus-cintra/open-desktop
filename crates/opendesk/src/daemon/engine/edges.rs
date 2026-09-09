@@ -1,0 +1,51 @@
+use std::collections::HashMap;
+
+use opendesk_core::config::Config;
+use opendesk_core::edge::{fraction_along, point_at, position_at};
+use opendesk_core::layout::{EdgeSegment, exterior_edges};
+use opendesk_proto::control::{OutputGeometry, Side};
+use opendesk_wayland::StripSpec;
+
+const ENTRY_INSET_PX: f64 = 2.0;
+const SIDES: [Side; 4] = [Side::Left, Side::Right, Side::Top, Side::Bottom];
+
+#[derive(Default)]
+pub struct EdgeMap {
+    segments: HashMap<Side, Vec<EdgeSegment>>,
+}
+
+impl EdgeMap {
+    pub fn rebuild(&mut self, outputs: &[OutputGeometry], config: &Config) -> Vec<StripSpec> {
+        self.segments.clear();
+        let mut strips = Vec::new();
+        for side in SIDES {
+            if config.peer_for_side(side).is_none() {
+                continue;
+            }
+            let segments = exterior_edges(outputs, side);
+            strips.extend(
+                segments
+                    .iter()
+                    .filter(|segment| segment.covers_whole_output_edge)
+                    .map(|segment| StripSpec {
+                        side,
+                        output: segment.output.clone(),
+                    }),
+            );
+            self.segments.insert(side, segments);
+        }
+        strips
+    }
+
+    pub fn fraction(&self, side: Side, position: f64) -> Option<f32> {
+        fraction_along(self.segments.get(&side)?, position)
+    }
+
+    pub fn hint(&self, side: Side, fraction: f32) -> Option<f64> {
+        position_at(self.segments.get(&side)?, fraction)
+    }
+
+    pub fn entry_point(&self, side: Side, fraction: f32) -> Option<(f64, f64)> {
+        point_at(self.segments.get(&side)?, side, fraction, ENTRY_INSET_PX)
+    }
+}
