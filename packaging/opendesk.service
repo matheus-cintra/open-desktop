@@ -1,0 +1,13 @@
+[Unit]
+Description=open-desktop: cross-machine cursor, keyboard, clipboard and file drag for Hyprland
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/opendesk daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
