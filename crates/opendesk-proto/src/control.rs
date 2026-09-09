@@ -140,11 +140,13 @@ pub enum ControlMessage {
         peer_id: PeerId,
         name: String,
         token: Option<Token>,
+        udp_port: u16,
         layout: Vec<OutputGeometry>,
     },
     HelloAck {
         peer_id: PeerId,
         name: String,
+        udp_port: u16,
         layout: Vec<OutputGeometry>,
     },
     HelloRejected {

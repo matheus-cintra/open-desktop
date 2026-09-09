@@ -82,6 +82,7 @@ mod tests {
                 peer_id: PeerId([7; 16]),
                 name: "desktop".to_owned(),
                 token: Some(Token([9; 32])),
+                udp_port: 47820,
                 layout: Vec::new(),
             },
             ControlMessage::RequestControl {

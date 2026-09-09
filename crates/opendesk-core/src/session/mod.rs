@@ -1,0 +1,235 @@
+mod active;
+mod transitions;
+
+#[cfg(test)]
+mod tests;
+
+use std::time::{Duration, Instant};
+
+use opendesk_proto::control::{DenyReason, PeerId, ReleaseReason, Side};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SessionConfig {
+    pub local_id: PeerId,
+    pub threshold_px: f64,
+    pub cancel_px: f64,
+    pub request_timeout: Duration,
+    pub arrival_grace: Duration,
+    pub immediate_cross: bool,
+    pub first_session_id: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SessionState {
+    Idle,
+    Pushing {
+        side: Side,
+        fraction: f32,
+        peer: PeerId,
+        accumulated_px: f64,
+    },
+    Requesting {
+        peer: PeerId,
+        side: Side,
+        fraction: f32,
+        since: Instant,
+    },
+    Controlling {
+        peer: PeerId,
+        session_id: u32,
+        side: Side,
+    },
+    Controlled {
+        peer: PeerId,
+        session_id: u32,
+        return_side: Side,
+        since: Instant,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SessionEvent {
+    EdgeEntered {
+        side: Side,
+        fraction: f32,
+        peer: Option<PeerId>,
+    },
+    EdgeLeft {
+        side: Side,
+    },
+    RelativeMotion {
+        dx: f64,
+        dy: f64,
+    },
+    PeerRequestedControl {
+        peer: PeerId,
+        side: Side,
+        fraction: f32,
+    },
+    PeerGranted {
+        peer: PeerId,
+        session_id: u32,
+    },
+    PeerDenied {
+        peer: PeerId,
+    },
+    PeerReleased {
+        peer: PeerId,
+        fraction: Option<f32>,
+    },
+    HotkeyPressed,
+    PeerDisconnected {
+        peer: PeerId,
+    },
+    Disabled,
+    Tick,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SessionAction {
+    LockPointer,
+    UnlockPointer {
+        side: Side,
+        fraction: f32,
+    },
+    ShowProgress {
+        side: Side,
+        fraction: f32,
+        progress: f32,
+    },
+    HideProgress,
+    SendRequestControl {
+        peer: PeerId,
+        side: Side,
+        fraction: f32,
+    },
+    SendControlGranted {
+        peer: PeerId,
+        session_id: u32,
+    },
+    SendControlDenied {
+        peer: PeerId,
+        reason: DenyReason,
+    },
+    SendReleaseControl {
+        peer: PeerId,
+        fraction: Option<f32>,
+        reason: ReleaseReason,
+    },
+    StartGrab,
+    StopGrab {
+        side: Side,
+        fraction: Option<f32>,
+    },
+    WarpCursor {
+        side: Side,
+        fraction: f32,
+    },
+    ShowArrival {
+        side: Side,
+        fraction: f32,
+    },
+    ReleaseAllPressed,
+}
+
+pub(crate) type Transition = (SessionState, Vec<SessionAction>);
+
+#[derive(Debug)]
+pub struct Session {
+    config: SessionConfig,
+    state: SessionState,
+    next_session_id: u32,
+}
+
+impl Session {
+    pub fn new(config: SessionConfig) -> Session {
+        Session {
+            next_session_id: config.first_session_id,
+            config,
+            state: SessionState::Idle,
+        }
+    }
+
+    pub fn state(&self) -> &SessionState {
+        &self.state
+    }
+
+    pub fn is_controlling(&self) -> bool {
+        matches!(self.state, SessionState::Controlling { .. })
+    }
+
+    pub fn is_controlled(&self) -> bool {
+        matches!(self.state, SessionState::Controlled { .. })
+    }
+
+    pub fn handle(&mut self, event: SessionEvent, now: Instant) -> Vec<SessionAction> {
+        let current = std::mem::replace(&mut self.state, SessionState::Idle);
+        let (next, actions) = match current {
+            SessionState::Idle => transitions::from_idle(self, event, now),
+            SessionState::Pushing {
+                side,
+                fraction,
+                peer,
+                accumulated_px,
+            } => transitions::from_pushing(self, side, fraction, peer, accumulated_px, event, now),
+            SessionState::Requesting {
+                peer,
+                side,
+                fraction,
+                since,
+            } => transitions::from_requesting(self, peer, side, fraction, since, event, now),
+            SessionState::Controlling {
+                peer,
+                session_id,
+                side,
+            } => active::from_controlling(peer, session_id, side, event),
+            SessionState::Controlled {
+                peer,
+                session_id,
+                return_side,
+                since,
+            } => active::from_controlled(self, peer, session_id, return_side, since, event, now),
+        };
+        self.state = next;
+        actions
+    }
+
+    pub(crate) fn config(&self) -> &SessionConfig {
+        &self.config
+    }
+
+    pub(crate) fn allocate_session_id(&mut self) -> u32 {
+        let session_id = self.next_session_id;
+        self.next_session_id = self.next_session_id.wrapping_add(1);
+        session_id
+    }
+
+    pub(crate) fn grant(
+        &mut self,
+        peer: PeerId,
+        requester_side: Side,
+        fraction: f32,
+        now: Instant,
+    ) -> Transition {
+        let session_id = self.allocate_session_id();
+        let return_side = requester_side.opposite();
+        let state = SessionState::Controlled {
+            peer,
+            session_id,
+            return_side,
+            since: now,
+        };
+        let actions = vec![
+            SessionAction::SendControlGranted { peer, session_id },
+            SessionAction::WarpCursor {
+                side: return_side,
+                fraction,
+            },
+            SessionAction::ShowArrival {
+                side: return_side,
+                fraction,
+            },
+        ];
+        (state, actions)
+    }
+}
