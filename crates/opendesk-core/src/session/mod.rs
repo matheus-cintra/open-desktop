@@ -15,6 +15,7 @@ pub struct SessionConfig {
     pub cancel_px: f64,
     pub request_timeout: Duration,
     pub arrival_grace: Duration,
+    pub reentry_grace: Duration,
     pub immediate_cross: bool,
     pub first_session_id: u32,
 }
@@ -139,6 +140,7 @@ pub struct Session {
     config: SessionConfig,
     state: SessionState,
     next_session_id: u32,
+    parked: Option<(Side, Instant)>,
 }
 
 impl Session {
@@ -147,6 +149,7 @@ impl Session {
             next_session_id: config.first_session_id,
             config,
             state: SessionState::Idle,
+            parked: None,
         }
     }
 
@@ -163,7 +166,23 @@ impl Session {
     }
 
     pub fn handle(&mut self, event: SessionEvent, now: Instant) -> Vec<SessionAction> {
+        if let SessionEvent::EdgeLeft { side } = &event
+            && self
+                .parked
+                .is_some_and(|(parked_side, _)| parked_side == *side)
+        {
+            self.parked = None;
+        }
+        if self.is_parked_reentry(&event, now) {
+            return Vec::new();
+        }
         let current = std::mem::replace(&mut self.state, SessionState::Idle);
+        let was_idle = matches!(current, SessionState::Idle);
+        let was_controlled = matches!(current, SessionState::Controlled { .. });
+        let entered_side = match &event {
+            SessionEvent::EdgeEntered { side, .. } => Some(*side),
+            _ => None,
+        };
         let (next, actions) = match current {
             SessionState::Idle => transitions::from_idle(self, event, now),
             SessionState::Pushing {
@@ -190,8 +209,28 @@ impl Session {
                 since,
             } => active::from_controlled(self, peer, session_id, return_side, since, event, now),
         };
+        if matches!(next, SessionState::Idle) {
+            if !was_idle {
+                let parked_side = parked_side_from(&actions)
+                    .or_else(|| was_controlled.then_some(entered_side).flatten());
+                self.parked = parked_side.map(|side| (side, now));
+            }
+        } else {
+            self.parked = None;
+        }
         self.state = next;
         actions
+    }
+
+    fn is_parked_reentry(&self, event: &SessionEvent, now: Instant) -> bool {
+        let SessionEvent::EdgeEntered { side, .. } = event else {
+            return false;
+        };
+        matches!(self.state, SessionState::Idle)
+            && self.parked.is_some_and(|(parked_side, parked_at)| {
+                parked_side == *side
+                    && now.saturating_duration_since(parked_at) < self.config.reentry_grace
+            })
     }
 
     pub(crate) fn config(&self) -> &SessionConfig {
@@ -232,4 +271,15 @@ impl Session {
         ];
         (state, actions)
     }
+}
+
+fn parked_side_from(actions: &[SessionAction]) -> Option<Side> {
+    actions.iter().find_map(|action| match action {
+        SessionAction::StopGrab {
+            side,
+            fraction: Some(_),
+        }
+        | SessionAction::UnlockPointer { side, .. } => Some(*side),
+        _ => None,
+    })
 }

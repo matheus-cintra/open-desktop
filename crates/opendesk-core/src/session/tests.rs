@@ -11,6 +11,7 @@ const THRESHOLD: f64 = 60.0;
 const CANCEL: f64 = 8.0;
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
 const ARRIVAL_GRACE: Duration = Duration::from_millis(300);
+const REENTRY_GRACE: Duration = Duration::from_millis(500);
 const FIRST_SESSION_ID: u32 = 7;
 
 fn config(local_id: PeerId, immediate_cross: bool) -> SessionConfig {
@@ -20,6 +21,7 @@ fn config(local_id: PeerId, immediate_cross: bool) -> SessionConfig {
         cancel_px: CANCEL,
         request_timeout: REQUEST_TIMEOUT,
         arrival_grace: ARRIVAL_GRACE,
+        reentry_grace: REENTRY_GRACE,
         immediate_cross,
         first_session_id: FIRST_SESSION_ID,
     }
@@ -748,4 +750,84 @@ fn rule_17_unlisted_events_are_ignored() {
             .is_empty()
     );
     assert!(controlled.is_controlled());
+}
+
+#[test]
+fn reentry_on_the_parked_side_is_ignored_within_the_grace() {
+    let now = Instant::now();
+    let mut session = controlling_session(now);
+    session.handle(
+        SessionEvent::PeerReleased {
+            peer: REMOTE,
+            fraction: Some(0.4),
+        },
+        now,
+    );
+    assert_eq!(session.state(), &SessionState::Idle);
+    let ignored = session.handle(entered(Side::Right, 0.4), now + Duration::from_millis(100));
+    assert!(ignored.is_empty());
+    assert_eq!(session.state(), &SessionState::Idle);
+    let accepted = session.handle(entered(Side::Right, 0.4), now + REENTRY_GRACE);
+    assert!(!accepted.is_empty());
+    assert!(matches!(session.state(), SessionState::Pushing { .. }));
+}
+
+#[test]
+fn reentry_on_another_side_is_not_blocked() {
+    let now = Instant::now();
+    let mut session = controlling_session(now);
+    session.handle(
+        SessionEvent::PeerReleased {
+            peer: REMOTE,
+            fraction: Some(0.4),
+        },
+        now,
+    );
+    let accepted = session.handle(entered(Side::Left, 0.4), now + Duration::from_millis(10));
+    assert!(!accepted.is_empty());
+}
+
+#[test]
+fn controlled_return_parks_the_return_side() {
+    let now = Instant::now();
+    let mut session = controlled_session(now);
+    let after_grace = now + ARRIVAL_GRACE;
+    let released = session.handle(entered(Side::Right, 0.7), after_grace);
+    assert_eq!(session.state(), &SessionState::Idle);
+    assert!(!released.is_empty());
+    let ignored = session.handle(
+        entered(Side::Right, 0.7),
+        after_grace + Duration::from_millis(50),
+    );
+    assert!(ignored.is_empty());
+}
+
+#[test]
+fn hotkey_release_does_not_park() {
+    let now = Instant::now();
+    let mut session = controlling_session(now);
+    session.handle(SessionEvent::HotkeyPressed, now);
+    assert_eq!(session.state(), &SessionState::Idle);
+    let accepted = session.handle(entered(Side::Right, 0.4), now + Duration::from_millis(10));
+    assert!(!accepted.is_empty());
+}
+
+#[test]
+fn leaving_the_parked_side_clears_the_block_before_the_grace() {
+    let now = Instant::now();
+    let mut session = controlling_session(now);
+    session.handle(
+        SessionEvent::PeerReleased {
+            peer: REMOTE,
+            fraction: Some(0.4),
+        },
+        now,
+    );
+    session.handle(
+        SessionEvent::EdgeLeft { side: Side::Right },
+        now + Duration::from_millis(50),
+    );
+    let accepted = session.handle(entered(Side::Right, 0.4), now + Duration::from_millis(60));
+    assert!(!accepted.is_empty());
+    assert!(matches!(session.state(), SessionState::Pushing { .. }));
 }

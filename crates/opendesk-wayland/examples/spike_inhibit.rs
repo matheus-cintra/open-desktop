@@ -80,6 +80,24 @@ fn inject_super_f12(spike: &Spike, logo: u32) -> SpikeResult<()> {
     Ok(())
 }
 
+fn inject_super_f12_externally(injector: &str, logo: u32) -> SpikeResult<()> {
+    println!("injecting through the external client {injector}");
+    let status = std::process::Command::new(injector)
+        .args([
+            format!("key:{KEY_SUPER_L}:down"),
+            format!("mods:{logo}"),
+            format!("key:{KEY_F12}:down"),
+            format!("key:{KEY_F12}:up"),
+            format!("key:{KEY_SUPER_L}:up"),
+            "mods:0".to_owned(),
+        ])
+        .status()?;
+    if !status.success() {
+        return Err(format!("external injector failed with {status}").into());
+    }
+    Ok(())
+}
+
 fn wait_for_marker(marker: &Path, timeout: Duration) -> bool {
     let deadline = std::time::Instant::now() + timeout;
     while std::time::Instant::now() < deadline {
@@ -144,7 +162,10 @@ fn main() -> SpikeResult<()> {
     spike.check("case 2: EdgeEntered within 1 s", entered.is_some());
     spike.send(WaylandCommand::StartGrab)?;
     sleep_millis(100);
-    inject_super_f12(&spike, logo)?;
+    match std::env::var("SPIKE_EXTERNAL_INJECT") {
+        Ok(injector) => inject_super_f12_externally(&injector, logo)?,
+        Err(_) => inject_super_f12(&spike, logo)?,
+    }
     let triggered_while_grabbed = wait_for_marker(&marker, Duration::from_secs(1));
     let events = spike.collect_for(Duration::from_millis(200));
     println!("events while grabbed: {events:?}");

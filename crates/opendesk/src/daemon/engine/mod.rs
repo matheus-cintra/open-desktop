@@ -1,6 +1,7 @@
 mod bootstrap;
 mod control;
 mod edges;
+mod events;
 mod forward;
 mod handshake;
 mod ipc;
@@ -16,9 +17,9 @@ use opendesk_core::config::Config;
 use opendesk_core::hotkey::Hotkey;
 use opendesk_core::peers::PeerStore;
 use opendesk_core::pressed::PressedInputs;
-use opendesk_core::session::{Session, SessionConfig, SessionEvent};
+use opendesk_core::session::{Session, SessionConfig, SessionEvent, SessionState};
 use opendesk_proto::control::{ControlMessage, OutputGeometry, PeerId};
-use opendesk_wayland::{HotkeySpec, WaylandCommand, WaylandEvent, WaylandHandle};
+use opendesk_wayland::{HotkeySpec, StripSpec, WaylandCommand, WaylandEvent, WaylandHandle};
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
@@ -37,6 +38,7 @@ pub use bootstrap::run_daemon;
 const TICK: Duration = Duration::from_millis(100);
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
 const ARRIVAL_GRACE: Duration = Duration::from_millis(300);
+const REENTRY_GRACE: Duration = Duration::from_millis(800);
 
 pub struct EngineChannels {
     pub wayland_events: UnboundedReceiver<WaylandEvent>,
@@ -72,6 +74,8 @@ pub struct Engine {
     discovered: HashMap<PeerId, DiscoveredPeer>,
     outputs: Vec<OutputGeometry>,
     edges: EdgeMap,
+    desired_strips: Vec<StripSpec>,
+    applied_strips: Vec<StripSpec>,
     local_keymap: Option<String>,
     enabled: bool,
     pairing: Option<Pairing>,
@@ -105,6 +109,8 @@ impl Engine {
             discovered: HashMap::new(),
             outputs: Vec::new(),
             edges: EdgeMap::default(),
+            desired_strips: Vec::new(),
+            applied_strips: Vec::new(),
             local_keymap: None,
             enabled: true,
             pairing: None,
@@ -142,60 +148,12 @@ impl Engine {
         outcome
     }
 
-    fn on_wayland(&mut self, event: WaylandEvent) {
-        match event {
-            WaylandEvent::Ready { outputs } | WaylandEvent::OutputsChanged { outputs } => {
-                self.outputs = outputs;
-                self.reconfigure_strips();
-                self.broadcast(ControlMessage::LayoutChanged {
-                    layout: self.outputs.clone(),
-                });
-            }
-            WaylandEvent::Keymap { xkb } => {
-                self.local_keymap = Some(xkb.clone());
-                self.broadcast(ControlMessage::Keymap { xkb });
-            }
-            WaylandEvent::EdgeEntered { side, position, .. } => {
-                if !self.enabled {
-                    return;
-                }
-                let fraction = self.edges.fraction(side, position).unwrap_or(0.5);
-                let peer = self.connected_peer_for_side(side);
-                self.dispatch(SessionEvent::EdgeEntered {
-                    side,
-                    fraction,
-                    peer,
-                });
-            }
-            WaylandEvent::EdgeLeft { side } => self.dispatch(SessionEvent::EdgeLeft { side }),
-            WaylandEvent::RelativeMotion { dx, dy } if !self.session.is_controlling() => {
-                self.dispatch(SessionEvent::RelativeMotion { dx, dy });
-            }
-            WaylandEvent::HotkeyPressed => self.dispatch(SessionEvent::HotkeyPressed),
-            WaylandEvent::Fatal { message } => {
-                error!(message, "wayland connection failed");
-                self.fatal = Some(message);
-            }
-            other => self.forward_wayland_input(other),
-        }
-    }
-
-    fn on_discovery(&mut self, event: DiscoveryEvent) {
-        match event {
-            DiscoveryEvent::Found(peer) => {
-                self.discovered.insert(peer.peer_id, peer);
-            }
-            DiscoveryEvent::Lost(peer_id) => {
-                self.discovered.remove(&peer_id);
-            }
-        }
-    }
-
     pub(super) fn dispatch(&mut self, event: SessionEvent) {
         let actions = self.session.handle(event, Instant::now());
         for action in actions {
             self.apply(action);
         }
+        self.apply_strips();
     }
 
     pub(super) fn wayland(&self, command: WaylandCommand) {
@@ -229,8 +187,19 @@ impl Engine {
     }
 
     pub(super) fn reconfigure_strips(&mut self) {
-        let strips = self.edges.rebuild(&self.outputs, &self.config);
-        self.wayland(WaylandCommand::ConfigureStrips { strips });
+        self.desired_strips = self.edges.rebuild(&self.outputs, &self.config);
+        self.apply_strips();
+    }
+
+    fn apply_strips(&mut self) {
+        let idle = matches!(self.session.state(), SessionState::Idle);
+        if !idle || self.desired_strips == self.applied_strips {
+            return;
+        }
+        self.applied_strips = self.desired_strips.clone();
+        self.wayland(WaylandCommand::ConfigureStrips {
+            strips: self.desired_strips.clone(),
+        });
     }
 
     pub(super) fn apply_hotkey(&self) {
@@ -267,6 +236,7 @@ fn session_config(local_id: PeerId, config: &Config) -> SessionConfig {
         cancel_px: config.general.edge_cancel_px,
         request_timeout: REQUEST_TIMEOUT,
         arrival_grace: ARRIVAL_GRACE,
+        reentry_grace: REENTRY_GRACE,
         immediate_cross: true,
         first_session_id: 1,
     }

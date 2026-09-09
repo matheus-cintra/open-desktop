@@ -58,7 +58,9 @@ impl Engine {
                 self.wayland(WaylandCommand::StopGrab { hint });
             }
             SessionAction::WarpCursor { side, fraction } => {
-                if let Some((x, y)) = self.edges.entry_point(side, fraction) {
+                let point = self.edges.entry_point(side, fraction);
+                debug!(%side, fraction, ?point, "warping cursor to the entry point");
+                if let Some((x, y)) = point {
                     self.wayland(WaylandCommand::InjectAbsoluteMotion { x, y });
                 }
             }
