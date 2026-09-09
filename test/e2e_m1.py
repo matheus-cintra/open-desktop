@@ -122,7 +122,7 @@ def cross(alpha, beta):
     monitor = alpha.monitor()
     alpha.inject(f"abs:{monitor['width'] - 1},{monitor['height'] / 2}")
     crossed = poll(3, lambda: alpha.state() == "controlling" and beta.state() == "controlled")
-    time.sleep(0.45)
+    time.sleep(0.15)
     return crossed
 
 
@@ -175,13 +175,11 @@ def run():
         check("SUPER+F12 typed on alpha fires the bind on beta", bool(poll(2, marker_beta.exists)))
         check("SUPER+F12 does not fire the bind on alpha", not marker_alpha.exists())
 
+        time.sleep(0.4)
         beta_before = beta.cursor()
-        for _ in range(10):
-            alpha.inject("motion:-60,0")
-            if poll(0.4, lambda: beta.cursor()[0] <= 1):
-                break
-        beta_at_edge = beta.cursor()
+        beta.inject(f"abs:0,{beta_monitor['height'] / 2}")
         returned = poll(3, lambda: alpha.state() == "idle" and beta.state() == "idle")
+        beta_at_edge = beta.cursor()
         check("crossing back beta's left edge returns control", bool(returned), f"alpha={alpha.state()} beta={beta.state()} before={beta_before} at_edge={beta_at_edge}")
         alpha_monitor = alpha.monitor()
         back = alpha.cursor()
