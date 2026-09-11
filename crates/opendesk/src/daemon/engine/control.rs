@@ -40,12 +40,13 @@ impl Engine {
                 fraction,
             } => {
                 self.active_peer = Some(peer);
+                let drag = self.take_pending_drag_info();
                 self.send_to(
                     peer,
                     ControlMessage::RequestControl {
                         side,
                         fraction,
-                        drag: None,
+                        drag,
                     },
                 );
             }
@@ -79,7 +80,10 @@ impl Engine {
                     self.wayland(WaylandCommand::InjectAbsoluteMotion { x, y });
                 }
             }
-            SessionAction::ReleaseAllPressed => self.release_all_pressed(),
+            SessionAction::ReleaseAllPressed => {
+                self.cancel_active_drop();
+                self.release_all_pressed();
+            }
         }
     }
 
@@ -134,9 +138,11 @@ impl Engine {
                     link.start_session(session_id);
                 }
                 self.dispatch(SessionEvent::PeerGranted { peer, session_id });
+                self.start_transfer_on_grant(peer);
             }
             ControlMessage::ControlDenied { reason } => {
                 debug!(%peer, ?reason, "control denied");
+                self.pending_transfer = None;
                 self.dispatch(SessionEvent::PeerDenied { peer });
             }
             ControlMessage::ReleaseControl { fraction, reason } => {
@@ -159,12 +165,10 @@ impl Engine {
                 }
             }
             ControlMessage::ClipboardSet { mime, bytes } => self.on_clipboard_received(mime, bytes),
-            ControlMessage::FileBegin(_)
-            | ControlMessage::FileChunk(_)
-            | ControlMessage::FileEnd(_)
-            | ControlMessage::DragCancel { .. } => {
-                debug!(%peer, "message not supported in this milestone");
-            }
+            ControlMessage::FileBegin(begin) => self.on_file_begin(begin),
+            ControlMessage::FileChunk(chunk) => self.on_file_chunk(chunk),
+            ControlMessage::FileEnd(end) => self.on_file_end(end),
+            ControlMessage::DragCancel { transfer_id } => self.on_drag_cancel(transfer_id),
             other => warn!(%peer, ?other, "unexpected message on an established link"),
         }
     }

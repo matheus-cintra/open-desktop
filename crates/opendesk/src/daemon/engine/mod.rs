@@ -1,6 +1,7 @@
 mod bootstrap;
 mod clipboard;
 mod control;
+mod drag;
 mod edges;
 mod events;
 mod forward;
@@ -88,6 +89,11 @@ pub struct Engine {
     last_ping_at: Instant,
     last_keepalive_at: Instant,
     clipboard_hash: Option<[u8; 32]>,
+    pending_drag: Option<drag::PendingDrag>,
+    pending_transfer: drag::TransferPlanSlot,
+    next_transfer_id: u64,
+    drop_accumulator: crate::daemon::transfer::DropAccumulator,
+    active_drop: Option<u64>,
     fatal: Option<String>,
 }
 
@@ -100,6 +106,7 @@ impl Engine {
         sinks: EngineSinks,
     ) -> Engine {
         let session = Session::new(session_config(identity.peer_id, &config));
+        let drop_accumulator = drag::new_accumulator(config.general.dnd_dir.clone());
         let now = Instant::now();
         Engine {
             identity,
@@ -124,6 +131,11 @@ impl Engine {
             last_ping_at: now,
             last_keepalive_at: now,
             clipboard_hash: None,
+            pending_drag: None,
+            pending_transfer: None,
+            next_transfer_id: 1,
+            drop_accumulator,
+            active_drop: None,
             fatal: None,
         }
     }

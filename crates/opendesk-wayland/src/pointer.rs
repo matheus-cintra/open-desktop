@@ -76,7 +76,7 @@ impl Dispatch2<WlPointer, State> for PointerData {
         _: &WlPointer,
         event: wl_pointer::Event,
         _: &Connection,
-        _: &QueueHandle<State>,
+        queue_handle: &QueueHandle<State>,
     ) {
         match event {
             wl_pointer::Event::Enter {
@@ -87,6 +87,7 @@ impl Dispatch2<WlPointer, State> for PointerData {
             } => {
                 state.devices.enter_serial = serial;
                 let Some(index) = state.strips.index_of_surface(&surface) else {
+                    state.drop_drag_pointer_entered(&surface, queue_handle);
                     return;
                 };
                 state.pointer.focused_strip = Some(index);
@@ -114,14 +115,17 @@ impl Dispatch2<WlPointer, State> for PointerData {
                 }
             }
             wl_pointer::Event::Button {
+                serial,
                 button,
                 state: button_state,
                 ..
             } => {
+                let pressed = button_state == WEnum::Value(ButtonState::Pressed);
+                state.drop_drag_pointer_button(serial, button, pressed, queue_handle);
                 if state.grab.active {
                     state.emit(WaylandEvent::Button {
                         code: button,
-                        pressed: button_state == WEnum::Value(ButtonState::Pressed),
+                        pressed,
                     });
                 }
             }

@@ -1,0 +1,112 @@
+mod device;
+mod overlay;
+mod peek;
+mod source;
+
+use std::time::Duration;
+
+use smithay_client_toolkit::data_device_manager::DataDeviceManagerState;
+use smithay_client_toolkit::data_device_manager::data_device::DataDevice;
+use wayland_client::QueueHandle;
+use wayland_client::globals::GlobalList;
+use wayland_client::protocol::wl_seat::WlSeat;
+use xkbcommon::xkb;
+
+use crate::dnd::overlay::DropDrag;
+use crate::error::WaylandError;
+use crate::state::State;
+
+const BTN_LEFT: u32 = 0x110;
+const KEY_ESCAPE: u32 = 1;
+const DROP_DRAG_TIMEOUT: Duration = Duration::from_millis(1000);
+
+pub struct Dnd {
+    manager: Option<DataDeviceManagerState>,
+    device: Option<DataDevice>,
+    entered_strip: Option<usize>,
+    drop: Option<DropDrag>,
+    generation: u64,
+}
+
+impl Dnd {
+    pub fn new(globals: &GlobalList, queue_handle: &QueueHandle<State>) -> Dnd {
+        let manager = match DataDeviceManagerState::bind(globals, queue_handle) {
+            Ok(manager) => {
+                tracing::info!("bound wl_data_device_manager");
+                Some(manager)
+            }
+            Err(error) => {
+                tracing::warn!(%error, "no wl_data_device_manager is available");
+                None
+            }
+        };
+        Dnd {
+            manager,
+            device: None,
+            entered_strip: None,
+            drop: None,
+            generation: 0,
+        }
+    }
+}
+
+impl State {
+    pub fn ensure_data_device(&mut self, queue_handle: &QueueHandle<State>, seat: &WlSeat) {
+        if self.dnd.device.is_some() {
+            return;
+        }
+        let Some(manager) = self.dnd.manager.as_ref() else {
+            return;
+        };
+        self.dnd.device = Some(manager.get_data_device(queue_handle, seat));
+        tracing::info!("wl_data_device created for the seat");
+    }
+
+    pub fn dnd_seat_gone(&mut self) {
+        self.cancel_drop_drag();
+        self.dnd.device = None;
+        self.dnd.entered_strip = None;
+    }
+
+    pub fn dnd_shutdown(&mut self) {
+        self.cancel_drop_drag();
+        self.dnd.device = None;
+        self.dnd.entered_strip = None;
+    }
+
+    pub fn abort_local_drag(&mut self) -> Result<(), WaylandError> {
+        let time = self.elapsed_millis();
+        let fallback = self.seat_keymap.clone();
+        let keyboard = self
+            .emulator
+            .keyboard
+            .as_mut()
+            .ok_or(WaylandError::NoKeyboard)?;
+        if !keyboard.has_keymap() {
+            let xkb_text = match fallback {
+                Some(text) => text,
+                None => default_keymap_text()?,
+            };
+            keyboard.set_keymap(&xkb_text)?;
+        }
+        keyboard.key(time, KEY_ESCAPE, true);
+        keyboard.key(time, KEY_ESCAPE, false);
+        tracing::info!("injected Escape to abort the local drag");
+        Ok(())
+    }
+}
+
+fn default_keymap_text() -> Result<String, WaylandError> {
+    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+    let keymap = xkb::Keymap::new_from_names(
+        &context,
+        "",
+        "",
+        "us",
+        "",
+        None,
+        xkb::KEYMAP_COMPILE_NO_FLAGS,
+    )
+    .ok_or(WaylandError::KeymapCompile)?;
+    Ok(keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1))
+}

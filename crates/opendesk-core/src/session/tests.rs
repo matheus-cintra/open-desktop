@@ -831,3 +831,24 @@ fn leaving_the_parked_side_clears_the_block_before_the_grace() {
     assert!(!accepted.is_empty());
     assert!(matches!(session.state(), SessionState::Pushing { .. }));
 }
+
+#[test]
+fn drag_crossed_requests_control_immediately_from_idle() {
+    let now = Instant::now();
+    let mut session = session();
+    let actions = session.handle(
+        SessionEvent::DragCrossed {
+            side: Side::Right,
+            fraction: 0.5,
+            peer: REMOTE,
+        },
+        now,
+    );
+    assert!(matches!(session.state(), SessionState::Requesting { .. }));
+    assert!(actions.contains(&SessionAction::StartGrab));
+    assert!(actions.contains(&SessionAction::SendRequestControl {
+        peer: REMOTE,
+        side: Side::Right,
+        fraction: 0.5,
+    }));
+}

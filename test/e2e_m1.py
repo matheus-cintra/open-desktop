@@ -16,6 +16,9 @@ RUNTIME = Path(os.environ["XDG_RUNTIME_DIR"])
 STATE = RUNTIME / "opendesk-e2e"
 BINARY = ROOT / "target/debug/opendesk"
 INJECT = ROOT / "target/debug/examples/inject"
+DRAG_SOURCE = ROOT / "target/debug/examples/drag_source"
+DROP_TARGET = ROOT / "target/debug/examples/drop_target"
+BTN_LEFT = 272
 PORTS = {"alpha": 47831, "beta": 47832}
 KEY_ESC, KEY_LEFTCTRL, KEY_LEFTALT, KEY_F12, KEY_LEFTMETA = 1, 29, 56, 88, 125
 MOD_CTRL, MOD_ALT, MOD_LOGO = 4, 8, 64
@@ -61,8 +64,10 @@ class Machine:
         self.env["OPENDESK_CONFIG"] = str(self.dir / "config.toml")
         self.env["OPENDESK_IPC_SOCKET"] = str(self.socket)
         self.env["RUST_LOG"] = "debug"
+        self.dnd_dir = self.dir / "dnd"
         (self.dir / "config.toml").write_text(
             f'[general]\nname = "{self.service_name}"\nport = {PORTS[self.name]}\n'
+            f'dnd_dir = "{self.dnd_dir}"\n'
         )
 
     def start_daemon(self):
@@ -148,6 +153,36 @@ def cross(alpha, beta):
     return crossed
 
 
+def _line_seen(process, needle):
+    import select
+    buffer = getattr(process, "_buffer", "")
+    while True:
+        ready, _, _ = select.select([process.stdout], [], [], 0)
+        if not ready:
+            break
+        chunk = os.read(process.stdout.fileno(), 4096).decode(errors="replace")
+        if not chunk:
+            break
+        buffer += chunk
+    process._buffer = buffer
+    return needle in buffer
+
+
+def _find_received(dnd_dir, name):
+    if not dnd_dir.exists():
+        return None
+    for path in dnd_dir.rglob(name):
+        return path
+    return None
+
+
+def _log_has(machine, needle):
+    try:
+        return needle in (machine.dir / "daemon.log").read_text(errors="replace")
+    except OSError:
+        return False
+
+
 def edge_bar_rows(machine, side):
     output = machine.monitor()
     ppm = subprocess.run(
@@ -218,6 +253,30 @@ def run():
         )
         alpha.wl_copy(mime="image/png", data=png)
         check("png copied on alpha appears byte-identical on beta", bool(poll(3, lambda: beta.wl_paste(mime="image/png") == png)), f"beta_len={len(beta.wl_paste(mime='image/png'))}")
+
+        drag_file = STATE / "drag-payload.bin"
+        drag_content = os.urandom(4096) + f"opendesk-drag-{RUN_TAG}".encode()
+        drag_file.write_bytes(drag_content)
+        source = subprocess.Popen([DRAG_SOURCE, str(drag_file)], env=alpha.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            ready = poll(4, lambda: source.poll() is None and _line_seen(source, "drag_source ready"))
+            check("drag source client is ready", bool(ready))
+            monitor = alpha.monitor()
+            alpha.inject("abs:100,100", f"button:{BTN_LEFT}:down")
+            check("drag started on the source", bool(poll(2, lambda: _line_seen(source, "drag started"))))
+            alpha.inject(f"abs:{monitor['width'] - 1},{monitor['height'] // 2}")
+            crossed = poll(5, lambda: alpha.state() == "controlling" and beta.state() == "controlled")
+            check("dragging a file to the edge crosses control", bool(crossed), f"alpha={alpha.state()} beta={beta.state()}")
+            received = poll(5, lambda: _find_received(beta.dnd_dir, drag_file.name))
+            check("beta received the dragged file byte-identical", bool(received) and received.read_bytes() == drag_content, f"path={received}")
+            check("beta started a drop drag", _log_has(beta, "drop drag") or _log_has(beta, "StartDropDrag") or _log_has(beta, "start_drag"))
+            alpha.inject(f"button:{BTN_LEFT}:up")
+            alpha.inject(f"key:{KEY_LEFTCTRL}:down", f"mods:{MOD_CTRL}", f"key:{KEY_LEFTALT}:down", f"mods:{MOD_CTRL | MOD_ALT}", f"key:{KEY_ESC}:down", f"key:{KEY_ESC}:up", f"key:{KEY_LEFTALT}:up", f"mods:{MOD_CTRL}", f"key:{KEY_LEFTCTRL}:up", "mods:0")
+            check("control returns to idle after the file drag", bool(poll(4, lambda: alpha.state() == "idle" and beta.state() == "idle")), f"alpha={alpha.state()} beta={beta.state()}")
+        finally:
+            if source.poll() is None:
+                source.terminate()
+            leave_strip(alpha)
 
         check("touching the edge starts pushing", touch_edge(alpha), f"alpha={alpha.state()}")
         monitor = alpha.monitor()

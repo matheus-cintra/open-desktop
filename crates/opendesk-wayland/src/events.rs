@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use opendesk_proto::control::{OutputGeometry, Side};
 use opendesk_proto::input::{Axis, AxisSource};
 
@@ -88,6 +90,20 @@ pub enum WaylandEvent {
     ClipboardChanged {
         content: ClipboardContent,
     },
+    DragEnteredEdge {
+        side: Side,
+        output: String,
+        position: f64,
+        uris: Vec<PathBuf>,
+    },
+    DragMotionEdge {
+        side: Side,
+        position: f64,
+    },
+    DragLeftEdge {
+        side: Side,
+    },
+    DragReleasedEdge,
     Fatal {
         message: String,
     },
@@ -156,5 +172,10 @@ pub enum WaylandCommand {
         locked: u32,
         group: u32,
     },
+    AbortLocalDrag,
+    StartDropDrag {
+        uris: Vec<PathBuf>,
+    },
+    CancelDropDrag,
     Shutdown,
 }

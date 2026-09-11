@@ -15,6 +15,7 @@ use crate::daemon::ipc::socket_path;
 use crate::daemon::net::discovery::{LocalIdentity, spawn_discovery};
 use crate::daemon::net::tcp::spawn_tcp;
 use crate::daemon::net::udp::spawn_udp;
+use crate::daemon::transfer::remove_expired;
 
 const IPC_QUEUE: usize = 16;
 
@@ -26,6 +27,10 @@ pub async fn run_daemon() -> anyhow::Result<()> {
     let peer_store = PeerStore::load(&peers_path)
         .with_context(|| format!("loading {}", peers_path.display()))?;
     let peer_id = identity::load_or_create(&config_path.with_file_name("identity.toml"))?;
+    remove_expired(
+        &config.general.dnd_dir,
+        std::time::Duration::from_secs(u64::from(config.general.dnd_keep_days) * 24 * 60 * 60),
+    );
     let identity = LocalIdentity {
         peer_id,
         name: config.general.name.clone(),

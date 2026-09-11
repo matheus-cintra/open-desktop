@@ -97,6 +97,9 @@ impl Engine {
             ControlMessage::Button { code, pressed } => {
                 self.injected.record_button(code, pressed);
                 self.wayland(WaylandCommand::InjectButton { code, pressed });
+                if !pressed {
+                    self.active_drop = None;
+                }
             }
             ControlMessage::Modifiers {
                 depressed,

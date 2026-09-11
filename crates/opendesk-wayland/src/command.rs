@@ -73,9 +73,16 @@ impl State {
             } => self
                 .virtual_keyboard()
                 .map(|keyboard| keyboard.modifiers(depressed, latched, locked, group)),
+            WaylandCommand::AbortLocalDrag => self.abort_local_drag(),
+            WaylandCommand::StartDropDrag { uris } => self.start_drop_drag(queue_handle, uris),
+            WaylandCommand::CancelDropDrag => {
+                self.cancel_drop_drag();
+                Ok(())
+            }
             WaylandCommand::Shutdown => {
                 tracing::info!("shutdown requested");
                 self.clipboard_shutdown();
+                self.dnd_shutdown();
                 self.release_grab_objects();
                 self.strips.clear();
                 self.bars.clear();

@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use calloop::LoopSignal;
+use calloop::{LoopHandle, LoopSignal};
 use smithay_client_toolkit::compositor::CompositorState;
 use smithay_client_toolkit::output::OutputState;
 use smithay_client_toolkit::registry::RegistryState;
@@ -14,6 +14,7 @@ use wayland_client::globals::GlobalList;
 
 use crate::bar::Bars;
 use crate::clipboard::Clipboard;
+use crate::dnd::Dnd;
 use crate::emulate::Emulator;
 use crate::error::WaylandError;
 use crate::events::WaylandEvent;
@@ -43,11 +44,14 @@ pub struct State {
     pub hotkey: HotkeyMatcher,
     pub emulator: Emulator,
     pub clipboard: Clipboard,
+    pub dnd: Dnd,
+    pub seat_keymap: Option<String>,
     pub events: UnboundedSender<WaylandEvent>,
     pub started_at: Instant,
     pub ready: bool,
     pending_events: Vec<WaylandEvent>,
     pub loop_signal: LoopSignal,
+    pub loop_handle: LoopHandle<'static, State>,
 }
 
 impl State {
@@ -56,6 +60,7 @@ impl State {
         queue_handle: &QueueHandle<State>,
         events: UnboundedSender<WaylandEvent>,
         loop_signal: LoopSignal,
+        loop_handle: LoopHandle<'static, State>,
     ) -> Result<State, WaylandError> {
         let shm = Shm::bind(globals, queue_handle)?;
         let pool = SlotPool::new(INITIAL_POOL_BYTES, &shm)?;
@@ -76,11 +81,14 @@ impl State {
             hotkey: HotkeyMatcher::new(),
             emulator: Emulator::default(),
             clipboard: Clipboard::new(globals, queue_handle),
+            dnd: Dnd::new(globals, queue_handle),
+            seat_keymap: None,
             events,
             started_at: Instant::now(),
             ready: false,
             pending_events: Vec::new(),
             loop_signal,
+            loop_handle,
         })
     }
 

@@ -1,6 +1,7 @@
 mod bar;
 mod clipboard;
 mod command;
+mod dnd;
 mod edge;
 mod emulate;
 mod error;

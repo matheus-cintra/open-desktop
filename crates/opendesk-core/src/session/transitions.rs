@@ -20,8 +20,32 @@ pub(super) fn from_idle(session: &mut Session, event: SessionEvent, now: Instant
             side,
             fraction,
         } => session.grant(peer, side, fraction, now),
+        SessionEvent::DragCrossed {
+            side,
+            fraction,
+            peer,
+        } => cross_immediately(side, fraction, peer, now),
         _ => stay_idle(),
     }
+}
+
+fn cross_immediately(side: Side, fraction: f32, peer: PeerId, now: Instant) -> Transition {
+    let state = SessionState::Requesting {
+        peer,
+        side,
+        fraction,
+        since: now,
+    };
+    let actions = vec![
+        SessionAction::LockPointer,
+        SessionAction::StartGrab,
+        SessionAction::SendRequestControl {
+            peer,
+            side,
+            fraction,
+        },
+    ];
+    (state, actions)
 }
 
 fn enter_edge(

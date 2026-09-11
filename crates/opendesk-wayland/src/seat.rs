@@ -46,6 +46,7 @@ impl SeatHandler for State {
         }
         self.devices.seat = Some(seat.clone());
         self.ensure_clipboard_device(queue_handle, &seat);
+        self.ensure_data_device(queue_handle, &seat);
         match capability {
             Capability::Pointer if self.devices.pointer.is_none() => {
                 let pointer = seat.get_pointer(queue_handle, PointerData);
@@ -111,6 +112,7 @@ impl SeatHandler for State {
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<State>, seat: WlSeat) {
         if self.devices.seat.as_ref() == Some(&seat) {
             self.devices = Devices::default();
+            self.dnd_seat_gone();
         }
     }
 }

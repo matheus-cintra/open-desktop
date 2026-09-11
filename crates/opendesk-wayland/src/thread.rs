@@ -77,7 +77,13 @@ fn connect(
     let (globals, mut event_queue) = registry_queue_init::<State>(&connection)?;
     let queue_handle = event_queue.handle();
     let event_loop = EventLoop::<State>::try_new()?;
-    let mut state = State::new(&globals, &queue_handle, events, event_loop.get_signal())?;
+    let mut state = State::new(
+        &globals,
+        &queue_handle,
+        events,
+        event_loop.get_signal(),
+        event_loop.handle(),
+    )?;
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;
 

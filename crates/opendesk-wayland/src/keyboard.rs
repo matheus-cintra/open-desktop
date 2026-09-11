@@ -73,6 +73,7 @@ impl State {
             tracing::error!(%error, "hotkey matcher could not compile the seat keymap");
         }
         tracing::info!(bytes = xkb.len(), "seat keymap received");
+        self.seat_keymap = Some(xkb.clone());
         self.emit(WaylandEvent::Keymap { xkb });
     }
 

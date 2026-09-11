@@ -37,6 +37,10 @@ impl VirtualKeyboard {
         Ok(())
     }
 
+    pub fn has_keymap(&self) -> bool {
+        self.has_keymap
+    }
+
     pub fn key(&self, time: u32, code: u32, pressed: bool) {
         if !self.has_keymap {
             tracing::warn!(code, "dropping key: virtual keyboard has no keymap yet");

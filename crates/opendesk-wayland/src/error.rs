@@ -58,4 +58,12 @@ pub enum WaylandError {
     UnknownOutput(String),
     #[error("no data-control clipboard manager is available")]
     NoClipboard,
+    #[error("no core data-device manager is available")]
+    NoDataDeviceManager,
+    #[error("no wl_data_device is available on the seat")]
+    NoDataDevice,
+    #[error("no drop-drag is in progress")]
+    NoDropDrag,
+    #[error("no local file uris to drag")]
+    NoDragUris,
 }

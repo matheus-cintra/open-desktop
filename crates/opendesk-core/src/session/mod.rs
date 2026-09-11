@@ -79,6 +79,11 @@ pub enum SessionEvent {
         fraction: Option<f32>,
     },
     HotkeyPressed,
+    DragCrossed {
+        side: Side,
+        fraction: f32,
+        peer: PeerId,
+    },
     PeerDisconnected {
         peer: PeerId,
     },

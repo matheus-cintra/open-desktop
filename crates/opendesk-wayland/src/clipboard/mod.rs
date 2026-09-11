@@ -1,6 +1,6 @@
 mod device;
 mod offer;
-mod read;
+pub(crate) mod read;
 mod source;
 
 use std::os::fd::AsFd;

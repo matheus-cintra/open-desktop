@@ -25,6 +25,9 @@ impl Engine {
                     return;
                 }
                 let fraction = self.edges.fraction(side, position).unwrap_or(0.5);
+                if self.drag_edge_crossing(side, fraction) {
+                    return;
+                }
                 let peer = self.connected_peer_for_side(side);
                 debug!(%side, position, fraction, ?peer, "edge entered");
                 self.dispatch(SessionEvent::EdgeEntered {
@@ -42,6 +45,19 @@ impl Engine {
             }
             WaylandEvent::HotkeyPressed => self.dispatch(SessionEvent::HotkeyPressed),
             WaylandEvent::ClipboardChanged { content } => self.on_clipboard_changed(content),
+            WaylandEvent::DragEnteredEdge {
+                side,
+                position,
+                uris,
+                ..
+            } => {
+                self.on_drag_entered_edge(side, position, uris);
+            }
+            WaylandEvent::DragMotionEdge { side, position } => {
+                self.on_drag_motion_edge(side, position);
+            }
+            WaylandEvent::DragLeftEdge { side } => self.on_drag_left_edge(side),
+            WaylandEvent::DragReleasedEdge => self.on_drag_released_edge(),
             WaylandEvent::Fatal { message } => {
                 error!(message, "wayland connection failed");
                 self.fatal = Some(message);
