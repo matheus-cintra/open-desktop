@@ -29,6 +29,19 @@ impl State {
                 Ok(())
             }
             WaylandCommand::SetKeymap { xkb } => self.set_virtual_keymap(&xkb),
+            WaylandCommand::SetBarStyle { style } => self.set_bar_style(style),
+            WaylandCommand::ShowProgressBar {
+                side,
+                position,
+                progress,
+            } => self.show_progress_bar(queue_handle, side, position, progress),
+            WaylandCommand::HideProgressBar => {
+                self.hide_progress_bar();
+                Ok(())
+            }
+            WaylandCommand::ShowArrivalBar { side, position } => {
+                self.show_arrival_bar(queue_handle, side, position)
+            }
             WaylandCommand::InjectAbsoluteMotion { x, y } => self.inject_absolute_motion(x, y),
             WaylandCommand::InjectMotion { dx, dy } => {
                 let time = self.elapsed_millis();
@@ -63,6 +76,7 @@ impl State {
                 tracing::info!("shutdown requested");
                 self.release_grab_objects();
                 self.strips.clear();
+                self.bars.clear();
                 self.loop_signal.stop();
                 Ok(())
             }

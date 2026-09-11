@@ -12,13 +12,28 @@ impl Engine {
     pub(super) fn apply(&mut self, action: SessionAction) {
         match action {
             SessionAction::LockPointer => self.wayland(WaylandCommand::LockPointer),
-            SessionAction::UnlockPointer { side, fraction } => {
-                let hint = self.edges.hint(side, fraction);
-                self.wayland(WaylandCommand::UnlockPointer { hint });
+            SessionAction::UnlockPointer { .. } => {
+                self.wayland(WaylandCommand::UnlockPointer { hint: None });
             }
-            SessionAction::ShowProgress { .. }
-            | SessionAction::HideProgress
-            | SessionAction::ShowArrival { .. } => {}
+            SessionAction::ShowProgress {
+                side,
+                fraction,
+                progress,
+            } => {
+                if let Some(position) = self.edges.hint(side, fraction) {
+                    self.wayland(WaylandCommand::ShowProgressBar {
+                        side,
+                        position,
+                        progress,
+                    });
+                }
+            }
+            SessionAction::HideProgress => self.wayland(WaylandCommand::HideProgressBar),
+            SessionAction::ShowArrival { side, fraction } => {
+                if let Some(position) = self.edges.hint(side, fraction) {
+                    self.wayland(WaylandCommand::ShowArrivalBar { side, position });
+                }
+            }
             SessionAction::SendRequestControl {
                 peer,
                 side,

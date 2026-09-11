@@ -1,7 +1,9 @@
 use std::io;
 
+use opendesk_proto::control::Side;
+use smithay_client_toolkit::error::GlobalError;
 use smithay_client_toolkit::shm::CreatePoolError;
-use smithay_client_toolkit::shm::slot::CreateBufferError;
+use smithay_client_toolkit::shm::slot::{ActivateSlotError, CreateBufferError};
 use wayland_client::globals::{BindError, GlobalError as RegistryGlobalError};
 use wayland_client::{ConnectError, DispatchError};
 
@@ -26,6 +28,14 @@ pub enum WaylandError {
     ShmPool(#[from] CreatePoolError),
     #[error("shared memory buffer error: {0}")]
     ShmBuffer(#[from] CreateBufferError),
+    #[error("buffer could not be attached: {0}")]
+    BufferAttach(#[from] ActivateSlotError),
+    #[error("wayland global error: {0}")]
+    Global(#[from] GlobalError),
+    #[error("failed to paint the bar: {0}")]
+    Paint(&'static str),
+    #[error("no output has an edge on side `{0}` near {1}")]
+    NoOutputOnEdge(Side, f64),
     #[error("io error: {0}")]
     Io(#[from] io::Error),
     #[error("keymap is not valid utf-8")]

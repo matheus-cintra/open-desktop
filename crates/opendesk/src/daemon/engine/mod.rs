@@ -13,13 +13,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use opendesk_core::color::Rgba;
 use opendesk_core::config::Config;
 use opendesk_core::hotkey::Hotkey;
 use opendesk_core::peers::PeerStore;
 use opendesk_core::pressed::PressedInputs;
 use opendesk_core::session::{Session, SessionConfig, SessionEvent, SessionState};
 use opendesk_proto::control::{ControlMessage, OutputGeometry, PeerId};
-use opendesk_wayland::{HotkeySpec, StripSpec, WaylandCommand, WaylandEvent, WaylandHandle};
+use opendesk_wayland::{
+    BarStyle, HotkeySpec, StripSpec, WaylandCommand, WaylandEvent, WaylandHandle,
+};
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
@@ -124,6 +127,7 @@ impl Engine {
 
     pub async fn run(mut self, mut channels: EngineChannels) -> anyhow::Result<()> {
         self.apply_hotkey();
+        self.apply_bar_style();
         let mut ticker = tokio::time::interval(TICK);
         let outcome = loop {
             tokio::select! {
@@ -207,6 +211,11 @@ impl Engine {
         self.wayland(WaylandCommand::SetReleaseHotkey { hotkey });
     }
 
+    pub(super) fn apply_bar_style(&self) {
+        let style = bar_style(&self.config.general.bar_color);
+        self.wayland(WaylandCommand::SetBarStyle { style });
+    }
+
     pub(super) fn connected_peer_for_side(
         &self,
         side: opendesk_proto::control::Side,
@@ -237,7 +246,7 @@ fn session_config(local_id: PeerId, config: &Config) -> SessionConfig {
         request_timeout: REQUEST_TIMEOUT,
         arrival_grace: ARRIVAL_GRACE,
         reentry_grace: REENTRY_GRACE,
-        immediate_cross: true,
+        immediate_cross: false,
         first_session_id: 1,
     }
 }
@@ -249,5 +258,14 @@ fn hotkey_spec(hotkey: &Hotkey) -> HotkeySpec {
         shift: hotkey.shift,
         logo: hotkey.logo,
         key: hotkey.key.clone(),
+    }
+}
+
+fn bar_style(color: &Rgba) -> BarStyle {
+    BarStyle {
+        red: color.red,
+        green: color.green,
+        blue: color.blue,
+        alpha: color.alpha,
     }
 }

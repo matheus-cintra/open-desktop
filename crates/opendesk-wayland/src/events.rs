@@ -7,6 +7,25 @@ pub struct StripSpec {
     pub output: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarStyle {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub alpha: u8,
+}
+
+impl Default for BarStyle {
+    fn default() -> BarStyle {
+        BarStyle {
+            red: 0x5e,
+            green: 0x81,
+            blue: 0xac,
+            alpha: 0xCC,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HotkeySpec {
     pub ctrl: bool,
@@ -83,6 +102,19 @@ pub enum WaylandCommand {
     },
     SetKeymap {
         xkb: String,
+    },
+    SetBarStyle {
+        style: BarStyle,
+    },
+    ShowProgressBar {
+        side: Side,
+        position: f64,
+        progress: f32,
+    },
+    HideProgressBar,
+    ShowArrivalBar {
+        side: Side,
+        position: f64,
     },
     InjectAbsoluteMotion {
         x: f64,

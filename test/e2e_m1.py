@@ -9,13 +9,14 @@ import sys
 import time
 from pathlib import Path
 
+import secrets
 ROOT = Path(__file__).resolve().parent.parent
+RUN_TAG = secrets.token_hex(2)
 RUNTIME = Path(os.environ["XDG_RUNTIME_DIR"])
 STATE = RUNTIME / "opendesk-e2e"
 BINARY = ROOT / "target/debug/opendesk"
 INJECT = ROOT / "target/debug/examples/inject"
 PORTS = {"alpha": 47831, "beta": 47832}
-PLACEMENT = {"alpha": ("beta", "right"), "beta": ("alpha", "left")}
 KEY_ESC, KEY_LEFTCTRL, KEY_LEFTALT, KEY_F12, KEY_LEFTMETA = 1, 29, 56, 88, 125
 MOD_CTRL, MOD_ALT, MOD_LOGO = 4, 8, 64
 
@@ -40,6 +41,7 @@ def poll(seconds, predicate):
 class Machine:
     def __init__(self, name):
         self.name = name
+        self.service_name = f"{name}-{RUN_TAG}"
         self.dir = STATE / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.socket = self.dir / "ipc.sock"
@@ -60,7 +62,7 @@ class Machine:
         self.env["OPENDESK_IPC_SOCKET"] = str(self.socket)
         self.env["RUST_LOG"] = "debug"
         (self.dir / "config.toml").write_text(
-            f'[general]\nname = "{self.name}"\nport = {PORTS[self.name]}\n'
+            f'[general]\nname = "{self.service_name}"\nport = {PORTS[self.name]}\n'
         )
 
     def start_daemon(self):
@@ -118,12 +120,46 @@ class Machine:
         subprocess.run([ROOT / "test/stop-nested-hyprland.sh", self.name], capture_output=True)
 
 
-def cross(alpha, beta):
+PUSH_THRESHOLD_PX = 60
+
+
+def touch_edge(alpha):
     monitor = alpha.monitor()
     alpha.inject(f"abs:{monitor['width'] - 1},{monitor['height'] / 2}")
+    return poll(2, lambda: alpha.state() == "pushing")
+
+
+def cross(alpha, beta):
+    touch_edge(alpha)
+    alpha.inject(f"motion:{PUSH_THRESHOLD_PX + 10},0")
     crossed = poll(3, lambda: alpha.state() == "controlling" and beta.state() == "controlled")
     time.sleep(0.15)
     return crossed
+
+
+def edge_bar_rows(machine, side):
+    output = machine.monitor()
+    ppm = subprocess.run(
+        ["grim", "-t", "ppm", "-o", output["name"], "-"], env=machine.env, capture_output=True, check=True
+    ).stdout
+    header, _, pixels = ppm.partition(b"255\n")
+    width, height = (int(v) for v in header.split()[1:3])
+    def pixel(x, y):
+        offset = (y * width + x) * 3
+        return pixels[offset:offset + 3]
+    reference = pixel(width // 2, height // 2)
+    columns = range(width - 3, width) if side == "right" else range(0, 3)
+    rows = 0
+    for y in range(max(0, height // 2 - 250), min(height, height // 2 + 250)):
+        if any(max(abs(a - b) for a, b in zip(pixel(x, y), reference)) > 40 for x in columns):
+            rows += 1
+    return rows
+
+
+def screenshot(machine, name):
+    path = STATE / f"{machine.name}-{name}.png"
+    subprocess.run(["grim", "-o", machine.monitor()["name"], str(path)], env=machine.env, check=True)
+    return path
 
 
 def leave_strip(alpha):
@@ -137,30 +173,53 @@ def run():
     try:
         for machine in (alpha, beta):
             machine.start_compositor()
+            machine.hyprctl("keyword", "layerrule", "no_anim on, match:namespace ^opendesk-bar$")
         time.sleep(1.0)
         for machine in (alpha, beta):
             check(f"{machine.name}: daemon started", machine.start_daemon())
-        found = poll(15, lambda: any(p["name"] == "beta" for p in alpha.ipc("Discover")["Discovered"]))
+        found = poll(15, lambda: any(p["name"] == beta.service_name for p in alpha.ipc("Discover")["Discovered"]))
         check("alpha discovers beta over mDNS", bool(found), json.dumps(alpha.ipc("Discover")))
 
-        check("pair request asks for a PIN", alpha.ipc({"Pair": {"name": "beta"}}) == "PinRequired")
+        check("pair request asks for a PIN", alpha.ipc({"Pair": {"name": beta.service_name}}) == "PinRequired")
         pin = poll(3, lambda: beta.status()["pending_pin"])
         check("beta exposes the pending PIN in status", bool(pin), f"pin={pin}")
         wrong = alpha.ipc({"SubmitPin": {"pin": "000000"}})
         check("wrong PIN is rejected", "Error" in wrong, json.dumps(wrong))
         right = alpha.ipc({"SubmitPin": {"pin": pin}})
         check("right PIN pairs", right == "Ok", json.dumps(right))
+        placement = {alpha.name: (beta.service_name, "right"), beta.name: (alpha.service_name, "left")}
         for machine in (alpha, beta):
-            peer, side = PLACEMENT[machine.name]
+            peer, side = placement[machine.name]
             code, output = machine.cli("peer", "set", peer, side)
             check(f"{machine.name}: peer set {peer} {side}", code == 0, output)
         connected = poll(15, lambda: all(p["connected"] for p in alpha.status()["peers"]) and all(p["connected"] for p in beta.status()["peers"]))
         check("both daemons report the link as connected", bool(connected), alpha.cli("status")[1])
 
-        check("crossing: alpha controlling, beta controlled", cross(alpha, beta), f"alpha={alpha.state()} beta={beta.state()}")
+        check("touching the edge starts pushing", touch_edge(alpha), f"alpha={alpha.state()}")
+        monitor = alpha.monitor()
+        alpha.inject(f"abs:{monitor['width'] // 2},{monitor['height'] // 2}")
+        check("moving away from the edge cancels the push", bool(poll(2, lambda: alpha.state() == "idle")), f"alpha={alpha.state()}")
+        leave_strip(alpha)
+        check("touching the edge again starts pushing", touch_edge(alpha))
+        alpha.inject("motion:30,0")
+        time.sleep(0.3)
+        half_rows = edge_bar_rows(alpha, "right")
+        half_png = screenshot(alpha, "bar-half")
+        check("half-way push shows a bar of about 130 px on the source edge", alpha.state() == "pushing" and 110 <= half_rows <= 150, f"rows={half_rows} state={alpha.state()} png={half_png}")
+        alpha.inject("motion:40,0")
+        crossed = poll(3, lambda: alpha.state() == "controlling" and beta.state() == "controlled")
+        arrival_rows = edge_bar_rows(beta, "left")
+        arrival_png = screenshot(beta, "arrival")
+        check("pushing past the threshold crosses", bool(crossed), f"alpha={alpha.state()} beta={beta.state()}")
+        check("arrival bar of about 220 px shows on the destination edge", 190 <= arrival_rows <= 250, f"rows={arrival_rows} png={arrival_png}")
+        time.sleep(0.9)
+        check("source progress bar is gone after crossing", edge_bar_rows(alpha, "right") == 0)
+        faded_rows = edge_bar_rows(beta, "left")
+        check("arrival bar fades out (cursor at the edge aside)", faded_rows < 40, f"rows={faded_rows}")
+        time.sleep(0.15)
         entry, beta_monitor, alpha_monitor = beta.cursor(), beta.monitor(), alpha.monitor()
         sizes = f"alpha={alpha_monitor['width']}x{alpha_monitor['height']} beta={beta_monitor['width']}x{beta_monitor['height']}"
-        check("beta cursor placed 2 px inside its left edge at the proportional height", entry[0] == 2 and abs(entry[1] - beta_monitor["height"] / 2) <= 3, f"cursor={entry} {sizes}")
+        check("beta cursor placed just inside its left edge at the proportional height", 1 <= entry[0] <= 3 and abs(entry[1] - beta_monitor["height"] / 2) <= 3, f"cursor={entry} {sizes}")
         alpha.inject("motion:30,0")
         moved = poll(2, lambda: beta.cursor()[0] >= 31)
         check("relative motion reaches beta", bool(moved), f"cursor={beta.cursor()}")

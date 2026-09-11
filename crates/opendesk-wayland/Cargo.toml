@@ -20,6 +20,7 @@ calloop-wayland-source = { workspace = true }
 xkbcommon = { workspace = true }
 memmap2 = { workspace = true }
 rustix = { workspace = true }
+tiny-skia = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

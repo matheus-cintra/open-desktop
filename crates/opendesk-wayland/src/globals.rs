@@ -118,7 +118,14 @@ impl CompositorHandler for State {
     ) {
     }
 
-    fn frame(&mut self, _: &Connection, _: &QueueHandle<State>, _: &wl_surface::WlSurface, _: u32) {
+    fn frame(
+        &mut self,
+        _: &Connection,
+        queue_handle: &QueueHandle<State>,
+        surface: &wl_surface::WlSurface,
+        _: u32,
+    ) {
+        self.bar_frame(queue_handle, surface);
     }
 
     fn surface_enter(

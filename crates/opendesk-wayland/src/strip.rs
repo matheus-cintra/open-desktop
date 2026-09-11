@@ -199,6 +199,9 @@ impl State {
 
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<State>, layer: &LayerSurface) {
+        if self.bar_closed(layer) {
+            return;
+        }
         if let Some(index) = self.strips.index_of_layer(layer) {
             tracing::warn!(index, "edge strip closed by the compositor");
             if self.pointer.focused_strip == Some(index) {
@@ -212,11 +215,14 @@ impl LayerShellHandler for State {
     fn configure(
         &mut self,
         _: &Connection,
-        _: &QueueHandle<State>,
+        queue_handle: &QueueHandle<State>,
         layer: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _: u32,
     ) {
+        if self.configure_bar(queue_handle, layer, &configure) {
+            return;
+        }
         let Some(index) = self.strips.index_of_layer(layer) else {
             return;
         };

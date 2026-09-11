@@ -12,6 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
 
+use crate::bar::Bars;
 use crate::emulate::Emulator;
 use crate::error::WaylandError;
 use crate::events::WaylandEvent;
@@ -36,6 +37,7 @@ pub struct State {
     pub devices: Devices,
     pub pointer: PointerTracking,
     pub strips: Strips,
+    pub bars: Bars,
     pub grab: Grab,
     pub hotkey: HotkeyMatcher,
     pub emulator: Emulator,
@@ -67,6 +69,7 @@ impl State {
             devices: Devices::default(),
             pointer: PointerTracking::default(),
             strips: Strips::default(),
+            bars: Bars::default(),
             grab: Grab::default(),
             hotkey: HotkeyMatcher::new(),
             emulator: Emulator::default(),

@@ -43,6 +43,7 @@ impl Engine {
                 self.config = config;
                 info!("config reloaded");
                 self.apply_hotkey();
+                self.apply_bar_style();
                 self.reconfigure_strips();
             }
             Err(error) => error!(%error, "config reload failed, keeping the previous config"),

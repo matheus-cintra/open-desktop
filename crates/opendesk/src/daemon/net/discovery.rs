@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
 use anyhow::Context;
 use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
@@ -135,15 +135,26 @@ fn resolved_to_peer(resolved: &ResolvedService, own_peer_id: PeerId) -> Option<D
     })
 }
 
-fn preferred_address(addresses: impl Iterator<Item = IpAddr>) -> Option<IpAddr> {
-    let mut fallback = None;
-    for address in addresses {
-        if address.is_ipv4() {
-            return Some(address);
-        }
-        fallback.get_or_insert(address);
+fn is_link_local_v6(address: Ipv6Addr) -> bool {
+    address.segments()[0] & 0xffc0 == 0xfe80
+}
+
+fn address_rank(address: IpAddr) -> Option<u8> {
+    match address {
+        IpAddr::V4(value) if value.is_link_local() => None,
+        IpAddr::V4(value) if value.is_loopback() => Some(3),
+        IpAddr::V4(_) => Some(0),
+        IpAddr::V6(value) if is_link_local_v6(value) => None,
+        IpAddr::V6(value) if value.is_loopback() => Some(4),
+        IpAddr::V6(_) => Some(2),
     }
-    fallback
+}
+
+fn preferred_address(addresses: impl Iterator<Item = IpAddr>) -> Option<IpAddr> {
+    addresses
+        .filter_map(|address| address_rank(address).map(|rank| (rank, address)))
+        .min_by_key(|(rank, _)| *rank)
+        .map(|(_, address)| address)
 }
 
 #[cfg(test)]
@@ -152,12 +163,32 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     #[test]
-    fn ipv4_wins_over_ipv6_regardless_of_order() {
-        let v6 = IpAddr::V6(Ipv6Addr::LOCALHOST);
-        let v4 = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2));
-        assert_eq!(preferred_address([v6, v4].into_iter()), Some(v4));
-        assert_eq!(preferred_address([v4, v6].into_iter()), Some(v4));
-        assert_eq!(preferred_address([v6].into_iter()), Some(v6));
+    fn routable_ipv4_wins_and_link_local_is_skipped() {
+        let loopback6 = IpAddr::V6(Ipv6Addr::LOCALHOST);
+        let routable4 = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2));
+        let link_local6 = IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 1, 2, 3, 4));
+        let link_local4 = IpAddr::V4(Ipv4Addr::new(169, 254, 1, 1));
+        let loopback4 = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        assert_eq!(
+            preferred_address([loopback6, routable4].into_iter()),
+            Some(routable4)
+        );
+        assert_eq!(
+            preferred_address([routable4, loopback6].into_iter()),
+            Some(routable4)
+        );
+        assert_eq!(
+            preferred_address([link_local6, loopback4].into_iter()),
+            Some(loopback4)
+        );
+        assert_eq!(
+            preferred_address([link_local6, link_local4].into_iter()),
+            None
+        );
+        assert_eq!(
+            preferred_address([loopback4, loopback6].into_iter()),
+            Some(loopback4)
+        );
         assert_eq!(preferred_address(std::iter::empty()), None);
     }
 }
