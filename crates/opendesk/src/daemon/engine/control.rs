@@ -158,8 +158,8 @@ impl Engine {
                     link.last_pong = Instant::now();
                 }
             }
-            ControlMessage::ClipboardSet { .. }
-            | ControlMessage::FileBegin(_)
+            ControlMessage::ClipboardSet { mime, bytes } => self.on_clipboard_received(mime, bytes),
+            ControlMessage::FileBegin(_)
             | ControlMessage::FileChunk(_)
             | ControlMessage::FileEnd(_)
             | ControlMessage::DragCancel { .. } => {

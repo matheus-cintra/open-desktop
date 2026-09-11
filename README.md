@@ -1,6 +1,6 @@
 # open-desktop
 
-Universal Control for Hyprland: push the cursor against a screen edge and it crosses to another Linux machine on the same LAN. Keyboard follows, and a small bar on the edge shows the push progress and the arrival.
+Universal Control for Hyprland: push the cursor against a screen edge and it crosses to another Linux machine on the same LAN. Keyboard follows, the clipboard syncs, and a small bar on the edge shows the push progress and the arrival.
 
 Requirements: Hyprland >= 0.56 on both machines, same LAN.
 
@@ -8,7 +8,8 @@ Requirements: Hyprland >= 0.56 on both machines, same LAN.
 
 - M1: cursor and keyboard sharing, mDNS discovery, PIN pairing, edge crossing, keyboard capture with the compositor's own binds forwarded to the target, emergency release hotkey, control return, disconnect handling.
 - M2: push resistance (the cursor holds at the edge and crosses only after you push past a threshold) and the on-screen bar (progress on the source, arrival on the target).
-- M3 (planned): clipboard sync. M4 (planned): file drag across the edge.
+- M3: clipboard sync (text and images) between the two machines, always on, independent of the cursor.
+- M4 (planned): file drag across the edge.
 
 ## Run
 

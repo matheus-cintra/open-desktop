@@ -110,6 +110,17 @@ class Machine:
     def inject(self, *steps):
         subprocess.run([INJECT, *steps], env=self.env, check=True, capture_output=True)
 
+    def wl_copy(self, text=None, mime=None, data=None):
+        if data is not None:
+            subprocess.run(["wl-copy", "-t", mime], env=self.env, input=data, check=True)
+        else:
+            subprocess.run(["wl-copy", text], env=self.env, check=True)
+
+    def wl_paste(self, mime=None):
+        args = ["wl-paste", "-n"] if mime is None else ["wl-paste", "-t", mime]
+        result = subprocess.run(args, env=self.env, capture_output=True)
+        return result.stdout
+
     def stop_daemon(self, force=False):
         if self.daemon and self.daemon.poll() is None:
             self.daemon.send_signal(signal.SIGKILL if force else signal.SIGTERM)
@@ -194,6 +205,19 @@ def run():
             check(f"{machine.name}: peer set {peer} {side}", code == 0, output)
         connected = poll(15, lambda: all(p["connected"] for p in alpha.status()["peers"]) and all(p["connected"] for p in beta.status()["peers"]))
         check("both daemons report the link as connected", bool(connected), alpha.cli("status")[1])
+
+        text_a = f"clip-a-{RUN_TAG}"
+        alpha.wl_copy(text=text_a)
+        check("text copied on alpha appears on beta", bool(poll(3, lambda: beta.wl_paste().decode(errors="replace") == text_a)), f"beta={beta.wl_paste()!r}")
+        text_b = f"clip-b-{RUN_TAG}"
+        beta.wl_copy(text=text_b)
+        check("text copied on beta appears on alpha", bool(poll(3, lambda: alpha.wl_paste().decode(errors="replace") == text_b)), f"alpha={alpha.wl_paste()!r}")
+        png = bytes.fromhex(
+            "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+            "de0000000c4944415478da63a8b79f05000299015926bfe5800000000049454e44ae426082"
+        )
+        alpha.wl_copy(mime="image/png", data=png)
+        check("png copied on alpha appears byte-identical on beta", bool(poll(3, lambda: beta.wl_paste(mime="image/png") == png)), f"beta_len={len(beta.wl_paste(mime='image/png'))}")
 
         check("touching the edge starts pushing", touch_edge(alpha), f"alpha={alpha.state()}")
         monitor = alpha.monitor()

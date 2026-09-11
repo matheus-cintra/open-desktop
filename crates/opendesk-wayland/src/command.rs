@@ -30,6 +30,7 @@ impl State {
             }
             WaylandCommand::SetKeymap { xkb } => self.set_virtual_keymap(&xkb),
             WaylandCommand::SetBarStyle { style } => self.set_bar_style(style),
+            WaylandCommand::SetClipboard { content } => self.set_clipboard(queue_handle, content),
             WaylandCommand::ShowProgressBar {
                 side,
                 position,
@@ -74,6 +75,7 @@ impl State {
                 .map(|keyboard| keyboard.modifiers(depressed, latched, locked, group)),
             WaylandCommand::Shutdown => {
                 tracing::info!("shutdown requested");
+                self.clipboard_shutdown();
                 self.release_grab_objects();
                 self.strips.clear();
                 self.bars.clear();

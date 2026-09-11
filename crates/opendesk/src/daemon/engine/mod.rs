@@ -1,4 +1,5 @@
 mod bootstrap;
+mod clipboard;
 mod control;
 mod edges;
 mod events;
@@ -86,6 +87,7 @@ pub struct Engine {
     config_dirty_since: Option<Instant>,
     last_ping_at: Instant,
     last_keepalive_at: Instant,
+    clipboard_hash: Option<[u8; 32]>,
     fatal: Option<String>,
 }
 
@@ -121,6 +123,7 @@ impl Engine {
             config_dirty_since: None,
             last_ping_at: now,
             last_keepalive_at: now,
+            clipboard_hash: None,
             fatal: None,
         }
     }

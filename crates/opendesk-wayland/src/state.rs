@@ -13,6 +13,7 @@ use wayland_client::QueueHandle;
 use wayland_client::globals::GlobalList;
 
 use crate::bar::Bars;
+use crate::clipboard::Clipboard;
 use crate::emulate::Emulator;
 use crate::error::WaylandError;
 use crate::events::WaylandEvent;
@@ -41,6 +42,7 @@ pub struct State {
     pub grab: Grab,
     pub hotkey: HotkeyMatcher,
     pub emulator: Emulator,
+    pub clipboard: Clipboard,
     pub events: UnboundedSender<WaylandEvent>,
     pub started_at: Instant,
     pub ready: bool,
@@ -73,6 +75,7 @@ impl State {
             grab: Grab::default(),
             hotkey: HotkeyMatcher::new(),
             emulator: Emulator::default(),
+            clipboard: Clipboard::new(globals, queue_handle),
             events,
             started_at: Instant::now(),
             ready: false,

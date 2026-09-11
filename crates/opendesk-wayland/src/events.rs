@@ -27,6 +27,12 @@ impl Default for BarStyle {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClipboardContent {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HotkeySpec {
     pub ctrl: bool,
     pub alt: bool,
@@ -79,6 +85,9 @@ pub enum WaylandEvent {
         group: u32,
     },
     HotkeyPressed,
+    ClipboardChanged {
+        content: ClipboardContent,
+    },
     Fatal {
         message: String,
     },
@@ -105,6 +114,9 @@ pub enum WaylandCommand {
     },
     SetBarStyle {
         style: BarStyle,
+    },
+    SetClipboard {
+        content: ClipboardContent,
     },
     ShowProgressBar {
         side: Side,

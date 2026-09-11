@@ -41,6 +41,7 @@ impl Engine {
                 self.dispatch(SessionEvent::RelativeMotion { dx, dy });
             }
             WaylandEvent::HotkeyPressed => self.dispatch(SessionEvent::HotkeyPressed),
+            WaylandEvent::ClipboardChanged { content } => self.on_clipboard_changed(content),
             WaylandEvent::Fatal { message } => {
                 error!(message, "wayland connection failed");
                 self.fatal = Some(message);

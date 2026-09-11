@@ -19,7 +19,7 @@ calloop = { workspace = true }
 calloop-wayland-source = { workspace = true }
 xkbcommon = { workspace = true }
 memmap2 = { workspace = true }
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["pipe"] }
 tiny-skia = { workspace = true }
 
 [dev-dependencies]

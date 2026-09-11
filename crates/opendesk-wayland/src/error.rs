@@ -56,4 +56,6 @@ pub enum WaylandError {
     NoFocusedStrip,
     #[error("output `{0}` is not connected")]
     UnknownOutput(String),
+    #[error("no data-control clipboard manager is available")]
+    NoClipboard,
 }

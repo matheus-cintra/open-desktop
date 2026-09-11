@@ -278,8 +278,7 @@ fn parked_side_from(actions: &[SessionAction]) -> Option<Side> {
         SessionAction::StopGrab {
             side,
             fraction: Some(_),
-        }
-        | SessionAction::UnlockPointer { side, .. } => Some(*side),
+        } => Some(*side),
         _ => None,
     })
 }

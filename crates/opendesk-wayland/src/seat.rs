@@ -45,6 +45,7 @@ impl SeatHandler for State {
             return;
         }
         self.devices.seat = Some(seat.clone());
+        self.ensure_clipboard_device(queue_handle, &seat);
         match capability {
             Capability::Pointer if self.devices.pointer.is_none() => {
                 let pointer = seat.get_pointer(queue_handle, PointerData);

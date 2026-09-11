@@ -1,4 +1,5 @@
 mod bar;
+mod clipboard;
 mod command;
 mod edge;
 mod emulate;
@@ -18,5 +19,5 @@ mod strip;
 mod thread;
 
 pub use error::WaylandError;
-pub use events::{BarStyle, HotkeySpec, StripSpec, WaylandCommand, WaylandEvent};
+pub use events::{BarStyle, ClipboardContent, HotkeySpec, StripSpec, WaylandCommand, WaylandEvent};
 pub use thread::{WaylandHandle, spawn};
