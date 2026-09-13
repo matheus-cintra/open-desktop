@@ -683,10 +683,18 @@ fn rule_16_disabled_from_every_state() {
     let mut requesting = requesting_session(now);
     assert_eq!(
         requesting.handle(SessionEvent::Disabled, now),
-        vec![SessionAction::StopGrab {
-            side: Side::Right,
-            fraction: Some(0.5)
-        }]
+        vec![
+            SessionAction::SendReleaseControl {
+                peer: REMOTE,
+                fraction: None,
+                reason: ReleaseReason::Disabled
+            },
+            SessionAction::StopGrab {
+                side: Side::Right,
+                fraction: Some(0.5)
+            },
+            SessionAction::ReleaseAllPressed,
+        ]
     );
     assert_eq!(requesting.state(), &SessionState::Idle);
 

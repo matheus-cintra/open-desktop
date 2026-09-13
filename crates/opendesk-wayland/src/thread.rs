@@ -24,6 +24,31 @@ pub struct WaylandHandle {
 }
 
 impl WaylandHandle {
+    /// Command sink for daemon integration tests without a live compositor.
+    #[cfg(feature = "test-harness")]
+    pub fn test_harness() -> (Self, mpsc::Receiver<WaylandCommand>) {
+        let (commands, channel) = calloop::channel::channel();
+        let (observed, receiver) = mpsc::channel();
+        let join = std::thread::spawn(move || {
+            while let Ok(command) = channel.recv() {
+                if matches!(command, WaylandCommand::Shutdown) {
+                    break;
+                }
+                if observed.send(command).is_err() {
+                    break;
+                }
+            }
+        });
+        (
+            Self {
+                commands,
+                drag_generation: Arc::new(AtomicU64::new(0)),
+                join,
+            },
+            receiver,
+        )
+    }
+
     pub fn shutdown(self) -> Result<(), WaylandError> {
         if self.commands.send(WaylandCommand::Shutdown).is_err() {
             tracing::debug!("wayland thread already stopped");

@@ -30,3 +30,6 @@ sha2 = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+opendesk-wayland = { workspace = true, features = ["test-harness"] }

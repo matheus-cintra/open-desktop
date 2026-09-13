@@ -234,7 +234,19 @@ pub(super) fn from_requesting(
         ),
         SessionEvent::PeerDenied { peer: denier } if denier == peer => abort(),
         SessionEvent::PeerDisconnected { peer: gone } if gone == peer => abort(),
-        SessionEvent::Disabled => abort(),
+        SessionEvent::Disabled => {
+            let (state, mut actions) = abort();
+            actions.insert(
+                0,
+                SessionAction::SendReleaseControl {
+                    peer,
+                    fraction: None,
+                    reason: opendesk_proto::control::ReleaseReason::Disabled,
+                },
+            );
+            actions.push(SessionAction::ReleaseAllPressed);
+            (state, actions)
+        }
         SessionEvent::Tick
             if now.saturating_duration_since(since) >= session.config().request_timeout =>
         {

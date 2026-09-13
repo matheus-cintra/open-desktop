@@ -204,6 +204,7 @@ impl Engine {
                 locked,
                 group,
             } => {
+                self.injected_locks = (locked, group);
                 self.wayland(WaylandCommand::InjectModifiers {
                     depressed,
                     latched,
@@ -234,7 +235,10 @@ impl Engine {
         }
         link.last_udp = Instant::now();
         match datagram.event {
-            InputEvent::Motion { dx, dy } => self.wayland(WaylandCommand::InjectMotion { dx, dy }),
+            InputEvent::Motion { dx, dy } => {
+                self.wayland(WaylandCommand::InjectMotion { dx, dy });
+                self.locked_motion(dx, dy);
+            }
             InputEvent::Axis {
                 axis,
                 value,

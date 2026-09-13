@@ -9,8 +9,11 @@ mod forward_drag;
 mod handshake;
 mod ipc;
 mod links;
+mod locked;
+mod monitor;
 mod pairing;
 mod return_drag;
+mod run;
 mod tick;
 
 use std::collections::HashMap;
@@ -78,6 +81,7 @@ pub struct Engine {
     outgoing_drag: Option<(PeerId, u64, Instant)>,
     incoming_drag: Option<(PeerId, u64, bool)>,
     injected: PressedInputs,
+    injected_locks: (u32, u32),
     links: LinkTable,
     discovered: HashMap<PeerId, DiscoveredPeer>,
     outputs: Vec<OutputGeometry>,
@@ -104,6 +108,7 @@ pub struct Engine {
     receiving_transfer: Option<(PeerId, u64)>,
     authorized_return_drop: Option<control::ReturnAuthorization>,
     fatal: Option<String>,
+    monitor: locked::MonitorState,
 }
 
 impl Engine {
@@ -129,6 +134,7 @@ impl Engine {
             outgoing_drag: None,
             incoming_drag: None,
             injected: PressedInputs::default(),
+            injected_locks: (0, 0),
             links: LinkTable::default(),
             discovered: HashMap::new(),
             outputs: Vec::new(),
@@ -155,38 +161,8 @@ impl Engine {
             receiving_transfer: None,
             authorized_return_drop: None,
             fatal: None,
+            monitor: locked::MonitorState::new(now),
         }
-    }
-
-    pub async fn run(mut self, mut channels: EngineChannels) -> anyhow::Result<()> {
-        self.apply_hotkey();
-        self.apply_bar_style();
-        let mut ticker = tokio::time::interval(TICK);
-        let outcome = loop {
-            tokio::select! {
-                Some(event) = channels.wayland_events.recv() => self.on_wayland(event),
-                Some(event) = channels.tcp_events.recv() => self.on_tcp(event),
-                Some(event) = channels.udp_events.recv() => self.on_udp(event),
-                Some(event) = channels.discovery_events.recv() => self.on_discovery(event),
-                Some((request, reply)) = channels.ipc_requests.recv() => self.on_ipc(request, reply),
-                Some(ConfigChanged) = channels.config_events.recv() => {
-                    self.config_dirty_since = Some(Instant::now());
-                }
-                Some(event) = channels.compositor_events.recv() => match event {
-                    CompositorEvent::LeftReleased(at) => self.on_left_released(at),
-                    CompositorEvent::EmergencyRelease => self.dispatch(SessionEvent::HotkeyPressed),
-                },
-                _ = ticker.tick() => self.on_tick(Instant::now()),
-                _ = &mut channels.shutdown => break Ok(()),
-            }
-            if let Some(message) = self.fatal.take() {
-                break Err(anyhow::anyhow!(message));
-            }
-        };
-        if let Err(error) = self.sinks.wayland.shutdown() {
-            warn!(%error, "wayland thread did not shut down cleanly");
-        }
-        outcome
     }
 
     pub(super) fn dispatch(&mut self, event: SessionEvent) {
@@ -195,10 +171,14 @@ impl Engine {
             self.authorized_return_drop = None;
             self.cancel_active_drop();
         }
+        let previous = std::mem::discriminant(self.session.state());
         let was_idle = matches!(self.session.state(), SessionState::Idle);
         let actions = self.session.handle(event, Instant::now());
         if was_idle && !matches!(self.session.state(), SessionState::Idle) {
             self.authorized_return_drop = None;
+        }
+        if previous != std::mem::discriminant(self.session.state()) {
+            self.monitor.invalidate(Instant::now());
         }
         for action in actions {
             self.apply(action);
@@ -237,6 +217,7 @@ impl Engine {
     }
 
     pub(super) fn reconfigure_strips(&mut self) {
+        self.monitor.invalidate(Instant::now());
         self.edges.rebuild(&self.outputs, &self.config);
         self.apply_strips();
     }

@@ -118,3 +118,18 @@ cargo build --release --locked
 Mouse, quatro bordas, teclado, clipboard de texto/imagens, arrasto e liberação de emergência foram validados fisicamente no par CachyOS/Arch. Cada nova release também exige verificação dos artefatos; testes de CI não substituem a validação nas sessões reais.
 
 Distribuído sob **MIT ou Apache-2.0**, à sua escolha.
+
+### Tela bloqueada
+
+Você pode entrar em um destino bloqueado, movimentar o mouse e digitar a senha.
+Para voltar sem desbloquear, mova o mouse para fora pela mesma borda por onde
+entrou, após os 300 ms de proteção da chegada. As outras bordas não devolvem o
+controle. Ao desbloquear, a sessão continua normalmente. Instale a mesma versão
+nos dois computadores para usar esse comportamento nos dois sentidos.
+
+Se a origem bloquear enquanto captura o mouse, o controle será liberado nos dois
+lados. Arrastos de arquivos para um destino bloqueado são recusados; bloquear
+durante um arrasto cancela a operação. Se o monitor do compositor perder estado
+válido por um segundo, o controle volta automaticamente; novas concessões são
+recusadas enquanto o estado local é desconhecido. Desbloquear não desfaz `pause`.
+Iniciar uma transferência a partir de uma origem bloqueada não é suportado.

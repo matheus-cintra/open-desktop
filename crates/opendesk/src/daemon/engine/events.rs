@@ -22,7 +22,10 @@ impl Engine {
                 self.broadcast(ControlMessage::Keymap { xkb });
             }
             WaylandEvent::EdgeEntered { side, position, .. } => {
-                if !self.enabled {
+                if !self.enabled
+                    || self.monitor.lock != super::monitor::LockState::Unlocked
+                    || !self.monitor.known(std::time::Instant::now())
+                {
                     return;
                 }
                 if self.return_drop_active
@@ -61,6 +64,11 @@ impl Engine {
                 uris,
                 ..
             } => {
+                if self.monitor.lock != super::monitor::LockState::Unlocked
+                    || !self.monitor.known(std::time::Instant::now())
+                {
+                    return;
+                }
                 if generation != self.sinks.wayland.drag_generation.load(Ordering::Acquire) {
                     return;
                 }

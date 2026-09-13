@@ -111,3 +111,45 @@ for manual recovery. Remove only the firewall rules added for this app if no
 longer needed. No checkout, configuration data or pairing store is deleted.
 
 Licensed under MIT or Apache-2.0, at your option.
+
+## Locked-screen control and recovery
+
+The engine keeps `Unknown`, `Locked`, and `Unlocked` compositor state independent
+of manual pause. A serial async worker queries Hyprland's `.socket.sock` directly:
+`j/locked` every 500 ms locally / 100 ms during handoff, and `j/cursorpos` every
+50 ms while receiving control on a locked screen. Scheduling has a 25 ms tick;
+queries never block the engine, have a 200 ms timeout and a 4 KiB response limit.
+The command formats are confirmed in [Hyprland 0.56.2 HyprCtl.cpp](https://raw.githubusercontent.com/hyprwm/Hyprland/v0.56.2/src/debug/HyprCtl.cpp).
+
+Session transitions and layout changes advance a generation. Old results are
+discarded. A locked return requires outward remote motion after arrival grace,
+a subsequent cursor query confirming the recorded entry edge, and motion no
+older than 200 ms. Inward motion cancels that intent. Logical xdg-output geometry
+handles scaled displays and negative origins; right/bottom use the final valid
+pixel. The proportional mapping and `EdgeEntered` session transition are shared
+with ordinary returns. Locked screens ignore layer-surface edge events. Leaving
+the session invalidates outstanding samples, preventing duplicate release.
+
+Missing valid lock state (or required cursor state) for one second releases
+control with existing `Disabled` messages. Locking the capturing source or a
+file-drag destination uses the same cleanup, including keys, buttons, depressed
+and latched modifiers, and drag cancellation. Toggle modifiers and keyboard group
+are preserved. Locked targets deny file-drag grants; normal keyboard/mouse grants
+remain possible. Unlocking resumes layer-surface detection without ending the
+session or clearing manual pause. Wire protocol, pairing, and config are unchanged.
+
+`test/e2e_locked.py` exercises actual Hyprland session locks in two nested
+compositors and uses persistent virtual pointers to time the return. Its own
+hyprlock child is unlocked with SIGUSR1 for the automated unlock transition;
+this does **not** validate password entry or physical input. Run nested suites
+sequentially. On hosts with multiple interfaces, isolate the fixture network:
+
+```sh
+unshare --user --map-current-user --keep-caps --net sh -c \
+  'ip link set lo up; exec python3 test/e2e_locked.py'
+```
+
+Physical acceptance is separate: both directions, all four entry edges, wrong
+edges rejected, return while still locked, re-entry/password/unlock continuation,
+lock during control, no stuck inputs, and return within 250 ms after the arrival
+guard. Record automated results separately from physical observations.

@@ -49,6 +49,33 @@ impl EdgeMap {
         fraction_along(self.segments.get(&side)?, position)
     }
 
+    /// Geometry is already logical (including scale/transform from xdg-output).
+    pub fn cursor_fraction(&self, side: Side, x: f64, y: f64) -> Option<f32> {
+        if !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let (across, along) = match side {
+            Side::Left | Side::Right => (x, y),
+            Side::Top | Side::Bottom => (y, x),
+        };
+        let segments = self.segments.get(&side)?;
+        for segment in segments {
+            let coordinate = f64::from(segment.coordinate)
+                - if matches!(side, Side::Right | Side::Bottom) {
+                    1.0
+                } else {
+                    0.0
+                };
+            if across.floor() == coordinate
+                && along >= f64::from(segment.start)
+                && along < f64::from(segment.end)
+            {
+                return self.fraction(side, along);
+            }
+        }
+        None
+    }
+
     pub fn hint(&self, side: Side, fraction: f32) -> Option<f64> {
         position_at(self.segments.get(&side)?, fraction)
     }

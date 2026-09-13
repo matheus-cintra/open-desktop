@@ -189,6 +189,12 @@ impl Engine {
             };
             self.wayland(command);
         }
+        self.wayland(WaylandCommand::InjectModifiers {
+            depressed: 0,
+            latched: 0,
+            locked: self.injected_locks.0,
+            group: self.injected_locks.1,
+        });
         self.active_peer = None;
     }
 
@@ -199,7 +205,10 @@ impl Engine {
                 fraction,
                 drag,
             } => {
-                if self.enabled {
+                if self.enabled
+                    && self.monitor.known(Instant::now())
+                    && (drag.is_none() || self.monitor.lock == super::monitor::LockState::Unlocked)
+                {
                     self.incoming_drag = drag.map(|info| (peer, info.transfer_id, false));
                     self.dispatch(SessionEvent::PeerRequestedControl {
                         peer,
@@ -210,6 +219,7 @@ impl Engine {
                         self.incoming_drag = None;
                     }
                 } else {
+                    debug!(lock = ?self.monitor.lock, enabled = self.enabled, "control refused: paused, unavailable monitor or locked file destination");
                     let reason = opendesk_proto::control::DenyReason::Disabled;
                     self.send_to(peer, ControlMessage::ControlDenied { reason });
                 }

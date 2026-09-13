@@ -41,6 +41,17 @@ impl Engine {
     }
 
     pub(super) fn on_file_begin(&mut self, peer: PeerId, begin: FileBegin) {
+        if self.monitor.lock != super::monitor::LockState::Unlocked
+            || !self.monitor.known(Instant::now())
+        {
+            self.send_to(
+                peer,
+                opendesk_proto::control::ControlMessage::DragCancel {
+                    transfer_id: begin.transfer_id,
+                },
+            );
+            return;
+        }
         let authorized_return = self.authorized_return_drop.as_ref().is_some_and(|auth| {
             auth.peer == peer
                 && auth.transfer_id == begin.transfer_id
