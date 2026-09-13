@@ -128,7 +128,7 @@ impl Engine {
                 if locked
                     && (self.has_file_drag()
                         || (!matches!(self.session.state(), SessionState::Idle)
-                            && !self.session.is_controlled()))
+                            && (cfg!(target_os = "macos") || !self.session.is_controlled())))
                 {
                     self.recover_compositor("local compositor locked while capturing or dragging");
                 }
@@ -187,7 +187,7 @@ impl Engine {
         };
     }
 
-    fn has_file_drag(&self) -> bool {
+    pub(super) fn has_file_drag(&self) -> bool {
         self.pending_drag.is_some()
             || self.pending_transfer.is_some()
             || self.incoming_drag.is_some()
@@ -204,5 +204,5 @@ impl Engine {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests;

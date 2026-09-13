@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Open Desktop
+Comment=Organizar computadores e compartilhar teclado e mouse
+Exec=opendesk gui
+Icon=input-mouse
+Terminal=false
+Categories=Utility;
+StartupWMClass=opendesk

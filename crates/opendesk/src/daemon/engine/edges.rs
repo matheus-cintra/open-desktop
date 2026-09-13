@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use crate::platform::StripSpec;
 use opendesk_core::config::Config;
 use opendesk_core::edge::{fraction_along, point_at, position_at};
 use opendesk_core::layout::{EdgeSegment, exterior_edges};
 use opendesk_proto::control::{OutputGeometry, Side};
-use opendesk_wayland::StripSpec;
 
 const ENTRY_INSET_PX: f64 = 2.0;
 const SIDES: [Side; 4] = [Side::Left, Side::Right, Side::Top, Side::Bottom];
@@ -21,15 +21,17 @@ impl EdgeMap {
             let segments = exterior_edges(outputs, side);
             self.segments.insert(side, segments);
         }
-        self.strips(config, None)
+        self.strips(config, None, false)
     }
 
-    pub fn strips(&self, config: &Config, return_side: Option<Side>) -> Vec<StripSpec> {
+    pub fn strips(&self, config: &Config, return_side: Option<Side>, map: bool) -> Vec<StripSpec> {
         SIDES
             .into_iter()
-            .filter(|side| match return_side {
-                Some(return_side) => *side == return_side,
-                None => config.peer_for_side(*side).is_some(),
+            .filter(|side| {
+                map || match return_side {
+                    Some(return_side) => *side == return_side,
+                    None => config.peer_for_side(*side).is_some(),
+                }
             })
             .flat_map(|side| {
                 self.segments

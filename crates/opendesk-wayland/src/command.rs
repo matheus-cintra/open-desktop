@@ -65,6 +65,14 @@ impl State {
                 value120,
                 source,
             } => self.inject_axis(axis, value, value120, source),
+            WaylandCommand::InjectPhysicalKey { code, pressed } => {
+                let time = self.elapsed_millis();
+                self.emulator
+                    .keyboard
+                    .as_mut()
+                    .ok_or(WaylandError::NoKeyboard)
+                    .map(|keyboard| keyboard.physical_key(time, code, pressed))
+            }
             WaylandCommand::InjectKey { code, pressed } => {
                 let time = self.elapsed_millis();
                 self.virtual_keyboard()

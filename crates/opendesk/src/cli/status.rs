@@ -22,6 +22,12 @@ pub fn render(report: &StatusReport) -> String {
         t!("status.state", state = report.state).into_owned(),
         t!("status.enabled", enabled = yes_no(report.enabled)).into_owned(),
     ];
+    if !report.platform.is_empty() {
+        lines.push(format!(
+            "Platform: {} · input: {}",
+            report.platform, report.input_status
+        ));
+    }
     if report.peers.is_empty() {
         lines.push(t!("status.no_peers").into_owned());
     } else {

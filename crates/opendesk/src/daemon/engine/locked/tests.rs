@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used)]
+mod cross_platform;
 mod recovery;
 mod socket;
 use super::*;
@@ -6,20 +7,20 @@ use crate::daemon::engine::links::PeerLink;
 use crate::daemon::engine::monitor::*;
 use crate::daemon::engine::*;
 use crate::daemon::net::tcp::TcpCommand;
+use crate::platform::{PlatformCommand, PlatformEvent, PlatformHandle};
 use opendesk_proto::control::{ControlMessage, OutputGeometry, PeerId, ReleaseReason};
-use opendesk_wayland::{WaylandCommand, WaylandEvent, WaylandHandle};
 
 const PEER: PeerId = PeerId([2; 16]);
 
 struct Fixture {
     engine: Engine,
     tcp: tokio::sync::mpsc::UnboundedReceiver<TcpCommand>,
-    commands: std::sync::mpsc::Receiver<WaylandCommand>,
+    commands: std::sync::mpsc::Receiver<PlatformCommand>,
 }
 
 impl Fixture {
     fn new() -> Self {
-        let (wayland, commands) = WaylandHandle::test_harness();
+        let (wayland, commands) = PlatformHandle::test_harness();
         let (tcp, received) = tokio::sync::mpsc::unbounded_channel();
         let (udp, _) = tokio::sync::mpsc::unbounded_channel();
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -55,6 +56,7 @@ impl Fixture {
                 Instant::now(),
             ),
         );
+        engine.set_capabilities(PEER, false, true);
         engine.outputs = vec![OutputGeometry {
             name: "scaled".into(),
             x: -1000,
@@ -157,7 +159,7 @@ fn all_edges_require_outward_motion_confirmed_position_and_arrival_grace() {
         f.sample(Sample::Cursor { x, y });
         assert!(!f.engine.session.is_controlled());
         f.sample(Sample::Cursor { x, y });
-        f.engine.on_wayland(WaylandEvent::EdgeEntered {
+        f.engine.on_wayland(PlatformEvent::EdgeEntered {
             side,
             position: if side.is_horizontal() { y } else { x },
             output: "scaled".into(),

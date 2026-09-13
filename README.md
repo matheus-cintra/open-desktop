@@ -2,7 +2,7 @@
   <img src="docs/icon.svg" width="96" alt="Open Desktop" />
   <h1>Open Desktop</h1>
   <p><strong>Seu mouse atravessa a tela. Seu trabalho continua.</strong></p>
-  <p>Compartilhe mouse, teclado, clipboard e arquivos entre dois computadores com Hyprland.</p>
+  <p>Compartilhe mouse, teclado, clipboard e arquivos entre computadores Linux e Mac.</p>
   <p>
     <img src="https://img.shields.io/badge/plataforma-Arch%20%2F%20CachyOS-74e1d0?style=flat-square" alt="Arch e CachyOS" />
     <img src="https://img.shields.io/badge/Hyprland-Lua-b2a1ff?style=flat-square" alt="Hyprland Lua" />
@@ -86,9 +86,9 @@ Também são aceitos `right`, `top`, `bottom` e a sintaxe anterior `peer set NOM
 | Clipboard | Texto e imagens |
 | Arquivos | Arrasto entre aplicações compatíveis, validado com Thunar |
 
-**O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo atual é 2; versões de protocolo incompatíveis são rejeitadas.
+**O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo da versão estável é 2; versões de protocolo incompatíveis são rejeitadas.
 
-Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, macOS ou Windows. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
+Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, Windows. O macOS tem apenas a prévia local descrita abaixo. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
 
 ## Atualização e remoção
 
@@ -110,6 +110,35 @@ cargo build --release --locked
 ./target/release/opendesk install
 ~/.local/bin/opendesk setup
 ```
+
+## Alpha 0.3.0 — mapa e macOS
+
+A [pré-release 0.3.0-alpha.1](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0-alpha.1)
+traz mapa compartilhado, controle contínuo entre três computadores e tomada de
+controle por atividade física. Use a mesma alpha em todos os computadores:
+**protocolo 4**, incompatível com as versões anteriores. Identidades e pareamentos
+são preservados. Uma tela ativa por computador; Linux Hyprland e Apple Silicon/macOS 26.
+
+No Linux, instale explicitamente a alpha (o link `latest` acima continua na estável):
+
+```sh
+curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/download/v0.3.0-alpha.1/install.sh -o /tmp/opendesk-install.sh
+sh /tmp/opendesk-install.sh v0.3.0-alpha.1
+opendesk install-activity
+opendesk gui
+```
+
+O auxiliar de atividade requer sudo para instalar um serviço dedicado. Ele publica
+somente notificações de atividade física; não publica teclas ou texto e não adiciona
+seu usuário ao grupo input. Pareie os computadores entre si e use **Aplicar** na
+janela de organização. Fechar a janela mantém o daemon funcionando. No Mac, abra
+**OD → Organizar computadores…**. Veja [instalação e permissões do Mac](docs/macos.md).
+
+Na alpha, computadores bloqueados são pulados e não recebem entrada. Arquivos por
+arraste continuam limitados a Linux ↔ Linux, sem atravessar um terceiro computador.
+Finder DnD não é suportado. [Notas e pendências de validação](docs/release-0.3.0-alpha.1.md).
+As instruções de bordas e tela bloqueada da versão estável abaixo não descrevem o
+modo de mapa da alpha.
 
 ## Desenvolvimento
 

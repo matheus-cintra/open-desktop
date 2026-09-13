@@ -1,5 +1,6 @@
 pub mod color;
 pub mod config;
+pub mod desktop_map;
 pub mod edge;
 pub mod hotkey;
 pub mod layout;

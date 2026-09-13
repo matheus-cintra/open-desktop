@@ -158,6 +158,29 @@ impl Session {
         }
     }
 
+    /// Called only after the map transfer handshake has committed.
+    pub fn activate_origin(&mut self, peer: PeerId, session_id: u32, side: Side) {
+        self.state = SessionState::Controlling {
+            peer,
+            session_id,
+            side,
+        };
+    }
+    pub fn activate_destination(
+        &mut self,
+        peer: PeerId,
+        session_id: u32,
+        side: Side,
+        now: Instant,
+    ) {
+        self.state = SessionState::Controlled {
+            peer,
+            session_id,
+            return_side: side.opposite(),
+            since: now,
+        };
+    }
+
     pub fn state(&self) -> &SessionState {
         &self.state
     }

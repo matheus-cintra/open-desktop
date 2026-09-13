@@ -31,6 +31,7 @@ pub enum InputEvent {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InputHeader {
+    pub epoch: Option<crate::map::ControlEpoch>,
     pub session_id: u32,
     pub sequence: u32,
 }

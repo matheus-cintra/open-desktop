@@ -122,6 +122,17 @@ pub(super) fn from_controlled(
         SessionEvent::PeerDisconnected { peer: gone } if gone == peer => {
             (SessionState::Idle, vec![SessionAction::ReleaseAllPressed])
         }
+        SessionEvent::HotkeyPressed => (
+            SessionState::Idle,
+            vec![
+                SessionAction::SendReleaseControl {
+                    peer,
+                    fraction: None,
+                    reason: ReleaseReason::Hotkey,
+                },
+                SessionAction::ReleaseAllPressed,
+            ],
+        ),
         SessionEvent::Disabled => (
             SessionState::Idle,
             vec![

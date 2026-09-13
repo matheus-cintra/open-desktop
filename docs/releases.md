@@ -11,7 +11,9 @@ A release contém:
 - `open-desktop-linux-x86_64.tar.gz`: binário, licenças, `BUILD.txt` com versão e
   commit, e `DEPENDENCIES.txt` com dependências dinâmicas;
 - `SHA256SUMS`: checksums do pacote e do bootstrap;
-- `install.sh`: bootstrap POSIX, compatível com `curl | sh`.
+- `install.sh`: bootstrap POSIX, compatível com `curl | sh`;
+- nas versões com Mac: `open-desktop-macos-arm64.zip` e `SHA256SUMS-macos`,
+  compilados no Mac a partir do mesmo commit, com assinatura de desenvolvimento.
 
 O nome do pacote é estável; a URL da release fixa a versão. Isso permite instalar
 `latest` sem interpretar JSON da API do GitHub. O instalador usa HTTPS, verifica
@@ -75,7 +77,8 @@ git push origin v0.1.0
 ```
 
 O GitHub Actions executa os checks, constrói, empacota e cria a release com notas
-automáticas. Tags contendo `-` geram prereleases. Não mova tags publicadas: corrija
+automáticas em um rascunho. Complete o rascunho com o pacote Mac, verifique os
+checksums e as notas antes de publicar. Tags contendo `-` geram prereleases. Não mova tags publicadas: corrija
 com uma nova versão. O workflow não executa os testes gráficos aninhados.
 
 Para voltar a um artefato publicado anterior: `opendesk update vX.Y.Z` nos dois

@@ -89,6 +89,16 @@ impl Engine {
             {
                 self.cancel_pending_drag();
             }
+            self.map.synced.remove(&peer);
+            if self
+                .map
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.next == peer || p.old == Some(peer))
+                || self.active_peer == Some(peer) && self.map.epoch.is_some()
+            {
+                self.stop_map_control();
+            }
             self.clear_return_drag(peer);
             self.dispatch(SessionEvent::PeerDisconnected { peer });
             if self.active_peer == Some(peer) {
@@ -259,6 +269,25 @@ impl Engine {
         info!(%peer_id, name, %address, "peer connected");
         let link = PeerLink::new(connection, address, udp_port, name, layout, Instant::now());
         self.links.insert_link(peer_id, link);
+        self.send_on(
+            connection,
+            ControlMessage::Map(opendesk_proto::map::MapControl::Clock {
+                counter: self.map.clock,
+            }),
+        );
+        self.send_on(
+            connection,
+            ControlMessage::Map(opendesk_proto::map::MapControl::Sync(
+                self.map.current.clone(),
+            )),
+        );
+        self.send_on(
+            connection,
+            ControlMessage::Capabilities {
+                macos: cfg!(target_os = "macos"),
+                file_drag: cfg!(target_os = "linux"),
+            },
+        );
         if let Some(xkb) = self.local_keymap.clone() {
             self.send_on(connection, ControlMessage::Keymap { xkb });
         }

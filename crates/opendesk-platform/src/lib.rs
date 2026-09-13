@@ -1,0 +1,210 @@
+use std::path::PathBuf;
+
+use opendesk_proto::control::{OutputGeometry, Side};
+use opendesk_proto::input::{Axis, AxisSource};
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct StripSpec {
+    pub side: Side,
+    pub output: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarStyle {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub alpha: u8,
+}
+
+impl Default for BarStyle {
+    fn default() -> BarStyle {
+        BarStyle {
+            red: 0x5e,
+            green: 0x81,
+            blue: 0xac,
+            alpha: 0xCC,
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ClipboardContent {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct HotkeySpec {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub logo: bool,
+    pub key: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub enum PlatformEvent {
+    PhysicalActivity,
+    Ready {
+        outputs: Vec<OutputGeometry>,
+    },
+    OutputsChanged {
+        outputs: Vec<OutputGeometry>,
+    },
+    Keymap {
+        xkb: String,
+    },
+    EdgeEntered {
+        side: Side,
+        output: String,
+        position: f64,
+    },
+    EdgeLeft {
+        side: Side,
+    },
+    RelativeMotion {
+        dx: f64,
+        dy: f64,
+    },
+    Button {
+        code: u32,
+        pressed: bool,
+    },
+    Axis {
+        axis: Axis,
+        value: f64,
+        value120: i32,
+        source: AxisSource,
+    },
+    Key {
+        code: u32,
+        pressed: bool,
+    },
+    Modifiers {
+        depressed: u32,
+        latched: u32,
+        locked: u32,
+        group: u32,
+    },
+    HotkeyPressed,
+    ClipboardChanged {
+        content: ClipboardContent,
+    },
+    DragEnteredEdge {
+        generation: u64,
+        side: Side,
+        output: String,
+        position: f64,
+        uris: Vec<PathBuf>,
+    },
+    DragMotionEdge {
+        side: Side,
+        position: f64,
+    },
+    DragLeftEdge {
+        generation: u64,
+        side: Side,
+    },
+    DragReleasedEdge {
+        generation: u64,
+    },
+    DragGeneration {
+        generation: u64,
+    },
+    DragFocusReady {
+        id: u64,
+    },
+    DropDragEnded {
+        id: u64,
+        accepted: bool,
+    },
+    Fatal {
+        message: String,
+    },
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub enum PlatformCommand {
+    ConfigureStrips {
+        strips: Vec<StripSpec>,
+    },
+    SetReleaseHotkey {
+        hotkey: HotkeySpec,
+    },
+    LockPointer,
+    UnlockPointer {
+        hint: Option<f64>,
+    },
+    StartGrab,
+    PrepareDragFocus {
+        id: u64,
+    },
+    CancelDragFocus {
+        id: u64,
+    },
+    StopGrab {
+        hint: Option<f64>,
+    },
+    SetKeymap {
+        xkb: String,
+    },
+    SetBarStyle {
+        style: BarStyle,
+    },
+    SetClipboard {
+        content: ClipboardContent,
+    },
+    ShowProgressBar {
+        side: Side,
+        position: f64,
+        progress: f32,
+    },
+    HideProgressBar,
+    ShowArrivalBar {
+        side: Side,
+        position: f64,
+    },
+    InjectAbsoluteMotion {
+        x: f64,
+        y: f64,
+    },
+    InjectMotion {
+        dx: f64,
+        dy: f64,
+    },
+    InjectButton {
+        code: u32,
+        pressed: bool,
+    },
+    InjectAxis {
+        axis: Axis,
+        value: f64,
+        value120: i32,
+        source: AxisSource,
+    },
+    InjectPhysicalKey {
+        code: u32,
+        pressed: bool,
+    },
+    InjectKey {
+        code: u32,
+        pressed: bool,
+    },
+    InjectModifiers {
+        depressed: u32,
+        latched: u32,
+        locked: u32,
+        group: u32,
+    },
+    AbortLocalDrag,
+    StartDropDrag {
+        id: u64,
+        uris: Vec<PathBuf>,
+    },
+    ReleaseDropDrag {
+        id: u64,
+    },
+    CancelDropDrag,
+    Shutdown,
+}

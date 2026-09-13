@@ -1,3 +1,7 @@
+#[cfg(target_os = "linux")]
+mod lifecycle;
+#[cfg(target_os = "macos")]
+#[path = "lifecycle_macos.rs"]
 mod lifecycle;
 pub mod pair;
 pub mod peer;
@@ -24,6 +28,14 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
+    /// Organize computers in a shared map
+    Gui,
+    #[cfg(target_os = "linux")]
+    /// Install the physical activity helper using a dedicated service account
+    InstallActivity,
+    #[cfg(target_os = "linux")]
+    /// Remove the physical activity helper
+    UninstallActivity,
     #[command(about = "Run the daemon in the foreground")]
     Daemon,
     /// Configure this computer and pair interactively
@@ -87,6 +99,11 @@ pub enum CliError {
 
 pub async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        #[cfg(target_os = "linux")]
+        Command::InstallActivity => lifecycle::activity("install"),
+        #[cfg(target_os = "linux")]
+        Command::UninstallActivity => lifecycle::activity("uninstall"),
+        Command::Gui => crate::gui::run(),
         Command::Setup => setup::run().await,
         Command::Install => lifecycle::install("install"),
         Command::Uninstall => lifecycle::install("uninstall"),

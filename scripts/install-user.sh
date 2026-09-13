@@ -10,6 +10,7 @@ module="$hypr_home/conf/opendesk.lua"
 hypr_config="$hypr_home/hyprland.lua"
 backup_home="$data_home/opendesk/backups"
 unit="$unit_home/opendesk.service"
+desktop="$data_home/applications/opendesk.desktop"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$script_dir/.." && pwd)"
 
@@ -93,6 +94,8 @@ case "${1:-install}" in
     backup_path "$bin_home/opendesk"
     backup_path "$unit"
     backup_path "$module"
+    backup_path "$desktop"
+    backup_path "$config_home/opendesk"
     if [[ "$(readlink -f "$source_bin")" != "$bin_home/opendesk" ]]; then
       next_binary="$(mktemp "$bin_home/.opendesk.XXXXXX")"
       install -m 0755 "$source_bin" "$next_binary"
@@ -100,6 +103,20 @@ case "${1:-install}" in
       next_binary=""
     fi
     install -m 0644 "$root/packaging/opendesk.service" "$unit"
+    mkdir -p "$(dirname "$desktop")"
+    cp "$root/packaging/opendesk.desktop" "$desktop"
+    # Desktop launchers do not necessarily inherit ~/.local/bin in PATH.
+    python3 - "$desktop" "$bin_home/opendesk" <<'PYDESKTOP'
+import pathlib, sys
+path=pathlib.Path(sys.argv[1])
+binary=sys.argv[2].replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$')
+path.write_text(path.read_text().replace('Exec=opendesk gui', 'Exec="'+binary+'" gui'))
+PYDESKTOP
+    if [[ "${OPENDESK_INSTALL_ACTIVITY:-0}" == 1 ]]; then
+      sudo bash "$root/scripts/install-activity.sh" install
+    else
+      printf 'Physical takeover requires the dedicated helper: opendesk install-activity (sudo). No key content is published.\n'
+    fi
 
     if [[ -f "$hypr_config" ]] && ! grep -Fqx 'require("conf/opendesk")  -- managed-by opendesk' "$hypr_config"; then
       backup_path "$hypr_config"
@@ -159,7 +176,7 @@ LUA
         for item in "${replaced[@]}"; do
           path="${item#!}"
           case "$path" in
-            "$bin_home/opendesk"|"$unit"|"$module")
+            "$bin_home/opendesk"|"$unit"|"$module"|"$desktop")
               rm -rf "$path"
               [[ "$item" == "!"* ]] || cp -a "$backup_dir${path}" "$path"
               ;;
@@ -182,6 +199,8 @@ LUA
     if has_graphical_session; then
       systemd-run --user --wait --pipe --collect hyprctl reload
     fi
+    rm -f "$desktop"
+    if [[ "${OPENDESK_INSTALL_ACTIVITY:-0}" == 1 ]]; then sudo bash "$root/scripts/install-activity.sh" uninstall; fi
     printf 'Removed launcher, service and managed Hyprland module. Identity, pairing and config files were preserved.\n'
     ;;
   rollback-hyprland)

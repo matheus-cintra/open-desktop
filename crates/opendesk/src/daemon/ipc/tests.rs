@@ -16,6 +16,8 @@ fn temp_socket_path(label: &str) -> PathBuf {
 
 fn sample_report() -> StatusReport {
     StatusReport {
+        platform: "test".into(),
+        input_status: "ready".into(),
         name: "desktop".to_owned(),
         peer_id: "ab".repeat(16),
         state: "idle".to_owned(),
@@ -112,6 +114,8 @@ fn requests_and_responses_round_trip_as_json_lines() {
     );
 
     let response = IpcResponse::Status(StatusReport {
+        platform: "test".into(),
+        input_status: "ready".into(),
         name: "desktop".to_owned(),
         peer_id: "00".repeat(16),
         state: "idle".to_owned(),

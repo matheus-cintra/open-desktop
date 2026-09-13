@@ -1,10 +1,10 @@
 use std::time::{Duration, Instant};
 
+use crate::platform::PlatformCommand;
 use opendesk_core::pressed::Release;
 use opendesk_core::session::{SessionAction, SessionEvent};
 use opendesk_proto::control::{ControlMessage, PeerId};
 use opendesk_proto::transfer::DragInfo;
-use opendesk_wayland::WaylandCommand;
 use tracing::{debug, warn};
 
 use super::Engine;
@@ -79,9 +79,9 @@ impl Engine {
 
     pub(super) fn apply(&mut self, action: SessionAction) {
         match action {
-            SessionAction::LockPointer => self.wayland(WaylandCommand::LockPointer),
+            SessionAction::LockPointer => self.wayland(PlatformCommand::LockPointer),
             SessionAction::UnlockPointer { .. } => {
-                self.wayland(WaylandCommand::UnlockPointer { hint: None });
+                self.wayland(PlatformCommand::UnlockPointer { hint: None });
             }
             SessionAction::ShowProgress {
                 side,
@@ -89,17 +89,17 @@ impl Engine {
                 progress,
             } => {
                 if let Some(position) = self.edges.hint(side, fraction) {
-                    self.wayland(WaylandCommand::ShowProgressBar {
+                    self.wayland(PlatformCommand::ShowProgressBar {
                         side,
                         position,
                         progress,
                     });
                 }
             }
-            SessionAction::HideProgress => self.wayland(WaylandCommand::HideProgressBar),
+            SessionAction::HideProgress => self.wayland(PlatformCommand::HideProgressBar),
             SessionAction::ShowArrival { side, fraction } => {
                 if let Some(position) = self.edges.hint(side, fraction) {
-                    self.wayland(WaylandCommand::ShowArrivalBar { side, position });
+                    self.wayland(PlatformCommand::ShowArrivalBar { side, position });
                 }
             }
             SessionAction::SendRequestControl {
@@ -107,6 +107,16 @@ impl Engine {
                 side,
                 fraction,
             } => {
+                if self.map.current.is_some() {
+                    if let Some(crossing) =
+                        self.map_destination(self.identity.peer_id, side, fraction)
+                    {
+                        self.begin_map_transfer(crossing.peer, side, crossing.fraction, None);
+                    } else {
+                        self.stop_map_control();
+                    }
+                    return;
+                }
                 self.active_peer = Some(peer);
                 let drag = self.take_pending_drag_info();
                 self.send_to(
@@ -136,18 +146,18 @@ impl Engine {
             } => {
                 self.send_to(peer, ControlMessage::ReleaseControl { fraction, reason });
             }
-            SessionAction::StartGrab => self.wayland(WaylandCommand::StartGrab),
+            SessionAction::StartGrab => self.wayland(PlatformCommand::StartGrab),
             SessionAction::StopGrab { side, fraction } => {
                 self.pending_transfer = None;
                 self.outgoing_drag = None;
                 let hint = fraction.and_then(|fraction| self.edges.hint(side, fraction));
-                self.wayland(WaylandCommand::StopGrab { hint });
+                self.wayland(PlatformCommand::StopGrab { hint });
             }
             SessionAction::WarpCursor { side, fraction } => {
                 let point = self.edges.entry_point(side, fraction);
                 debug!(%side, fraction, ?point, "warping cursor to the entry point");
                 if let Some((x, y)) = point {
-                    self.wayland(WaylandCommand::InjectAbsoluteMotion { x, y });
+                    self.wayland(PlatformCommand::InjectAbsoluteMotion { x, y });
                 }
             }
             SessionAction::ReleaseAllPressed => {
@@ -161,13 +171,10 @@ impl Engine {
         self.forwarded_left_pressed = false;
         self.outgoing_drag = None;
         self.incoming_drag = None;
-        if let Some(peer) = self.active_peer {
-            for release in self.forwarded.drain_releases() {
+        for release in self.forwarded.drain_releases() {
+            if let Some(peer) = self.active_peer {
                 let message = match release {
-                    Release::Key(code) => ControlMessage::Key {
-                        code,
-                        pressed: false,
-                    },
+                    Release::Key(code) => self.key_message(peer, code, false),
                     Release::Button(code) => ControlMessage::Button {
                         code,
                         pressed: false,
@@ -178,35 +185,64 @@ impl Engine {
         }
         for release in self.injected.drain_releases() {
             let command = match release {
-                Release::Key(code) => WaylandCommand::InjectKey {
-                    code,
-                    pressed: false,
-                },
-                Release::Button(code) => WaylandCommand::InjectButton {
+                Release::Key(code) => {
+                    if self.injected_physical {
+                        PlatformCommand::InjectPhysicalKey {
+                            code,
+                            pressed: false,
+                        }
+                    } else {
+                        PlatformCommand::InjectKey {
+                            code,
+                            pressed: false,
+                        }
+                    }
+                }
+                Release::Button(code) => PlatformCommand::InjectButton {
                     code,
                     pressed: false,
                 },
             };
             self.wayland(command);
         }
-        self.wayland(WaylandCommand::InjectModifiers {
+        self.wayland(PlatformCommand::InjectModifiers {
             depressed: 0,
             latched: 0,
             locked: self.injected_locks.0,
             group: self.injected_locks.1,
         });
+        self.injected_physical = false;
         self.active_peer = None;
     }
 
     pub(super) fn on_control_message(&mut self, peer: PeerId, message: ControlMessage) {
+        if self.map.current.is_some()
+            && matches!(
+                message,
+                ControlMessage::ControlGranted { .. }
+                    | ControlMessage::ControlDenied { .. }
+                    | ControlMessage::ReleaseControl { .. }
+                    | ControlMessage::ReturnDrag { .. }
+            )
+        {
+            return;
+        }
         match message {
+            ControlMessage::Map(message) => self.on_map_message(peer, message),
+            ControlMessage::Capabilities { macos, file_drag } => {
+                self.set_capabilities(peer, macos, file_drag);
+            }
             ControlMessage::RequestControl {
                 side,
                 fraction,
                 drag,
             } => {
-                if self.enabled
+                if self.map.current.is_none()
+                    && self.enabled
                     && self.monitor.known(Instant::now())
+                    && (!cfg!(target_os = "macos")
+                        || self.monitor.lock == super::monitor::LockState::Unlocked)
+                    && (drag.is_none() || self.supports_drag(peer))
                     && (drag.is_none() || self.monitor.lock == super::monitor::LockState::Unlocked)
                 {
                     self.incoming_drag = drag.map(|info| (peer, info.transfer_id, false));
@@ -253,10 +289,19 @@ impl Engine {
                     link.layout = layout;
                 }
             }
-            ControlMessage::Keymap { xkb } => self.wayland(WaylandCommand::SetKeymap { xkb }),
-            ControlMessage::Key { .. }
+            ControlMessage::Keymap { xkb } => {
+                if !self.cross_platform(peer) {
+                    self.wayland(PlatformCommand::SetKeymap { xkb });
+                }
+            }
+            ControlMessage::PhysicalKey { .. }
+            | ControlMessage::Key { .. }
             | ControlMessage::Button { .. }
-            | ControlMessage::Modifiers { .. } => self.on_peer_input(peer, message),
+            | ControlMessage::Modifiers { .. } => {
+                if self.map.current.is_none() {
+                    self.on_peer_input(peer, message);
+                }
+            }
             ControlMessage::Ping { nonce } => self.send_to(peer, ControlMessage::Pong { nonce }),
             ControlMessage::Pong { .. } => {
                 if let Some(link) = self.links.link_mut(peer) {
@@ -269,7 +314,10 @@ impl Engine {
             ControlMessage::FileEnd(end) => self.on_file_end(peer, end),
             ControlMessage::DragCancel { transfer_id } => self.on_drag_cancel(peer, transfer_id),
             ControlMessage::ReturnDrag { drag } => {
-                if self.session.is_controlling() && self.active_peer == Some(peer) {
+                if self.supports_drag(peer)
+                    && self.session.is_controlling()
+                    && self.active_peer == Some(peer)
+                {
                     self.authorize_return_drag(peer, drag);
                 }
             }

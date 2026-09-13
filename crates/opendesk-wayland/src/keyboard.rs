@@ -28,10 +28,19 @@ impl Dispatch2<WlKeyboard, State> for KeyboardData {
                     Err(error) => tracing::error!(%error, "failed to read the seat keymap"),
                 }
             }
-            wl_keyboard::Event::Enter { surface, .. } => {
+            wl_keyboard::Event::Enter { surface, keys, .. } => {
                 let focused = state.strips.index_of_surface(&surface).is_some();
                 tracing::debug!(focused, "keyboard focus entered");
                 state.drag_focus_entered(&surface);
+                if focused && state.grab.active {
+                    for bytes in keys.as_chunks::<4>().0 {
+                        let code = u32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                        state.emit(WaylandEvent::Key {
+                            code,
+                            pressed: true,
+                        });
+                    }
+                }
             }
             wl_keyboard::Event::Leave { .. } => {
                 tracing::debug!("keyboard focus left");

@@ -1,3 +1,4 @@
+mod activity;
 mod bootstrap;
 mod clipboard;
 mod control;
@@ -8,8 +9,14 @@ mod forward;
 mod forward_drag;
 mod handshake;
 mod ipc;
+mod keyboard;
 mod links;
 mod locked;
+mod map;
+#[cfg(target_os = "linux")]
+mod monitor;
+#[cfg(target_os = "macos")]
+#[path = "monitor_macos.rs"]
 mod monitor;
 mod pairing;
 mod return_drag;
@@ -20,12 +27,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use crate::platform::{PlatformCommand, PlatformEvent, PlatformHandle, StripSpec};
 use opendesk_core::config::Config;
 use opendesk_core::peers::PeerStore;
 use opendesk_core::pressed::PressedInputs;
 use opendesk_core::session::{Session, SessionConfig, SessionEvent, SessionState};
 use opendesk_proto::control::{ControlMessage, OutputGeometry, PeerId};
-use opendesk_wayland::{StripSpec, WaylandCommand, WaylandEvent, WaylandHandle};
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
@@ -42,13 +49,13 @@ use pairing::Pairing;
 pub use bootstrap::run_daemon;
 use bootstrap::{CompositorEvent, bar_style, hotkey_spec};
 
-const TICK: Duration = Duration::from_millis(100);
+const TICK: Duration = Duration::from_millis(25);
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
 const ARRIVAL_GRACE: Duration = Duration::from_millis(300);
 const REENTRY_GRACE: Duration = Duration::from_millis(800);
 
 pub struct EngineChannels {
-    pub wayland_events: UnboundedReceiver<WaylandEvent>,
+    pub wayland_events: UnboundedReceiver<PlatformEvent>,
     pub tcp_events: UnboundedReceiver<TcpEvent>,
     pub udp_events: UnboundedReceiver<UdpEvent>,
     pub discovery_events: UnboundedReceiver<DiscoveryEvent>,
@@ -59,7 +66,7 @@ pub struct EngineChannels {
 }
 
 pub struct EngineSinks {
-    pub wayland: WaylandHandle,
+    pub wayland: PlatformHandle,
     pub tcp: UnboundedSender<TcpCommand>,
     pub udp: UnboundedSender<UdpCommand>,
 }
@@ -70,6 +77,7 @@ pub struct EnginePaths {
 }
 
 pub struct Engine {
+    map: map::MapState,
     identity: LocalIdentity,
     paths: EnginePaths,
     config: Config,
@@ -81,6 +89,7 @@ pub struct Engine {
     outgoing_drag: Option<(PeerId, u64, Instant)>,
     incoming_drag: Option<(PeerId, u64, bool)>,
     injected: PressedInputs,
+    injected_physical: bool,
     injected_locks: (u32, u32),
     links: LinkTable,
     discovered: HashMap<PeerId, DiscoveredPeer>,
@@ -123,6 +132,7 @@ impl Engine {
         let drop_accumulator = drag::new_accumulator(config.general.dnd_dir.clone());
         let now = Instant::now();
         Engine {
+            map: map::MapState::new(&paths.config.with_file_name("map.json"), identity.peer_id),
             identity,
             paths,
             config,
@@ -134,6 +144,7 @@ impl Engine {
             outgoing_drag: None,
             incoming_drag: None,
             injected: PressedInputs::default(),
+            injected_physical: false,
             injected_locks: (0, 0),
             links: LinkTable::default(),
             discovered: HashMap::new(),
@@ -186,7 +197,7 @@ impl Engine {
         self.apply_strips();
     }
 
-    pub(super) fn wayland(&self, command: WaylandCommand) {
+    pub(super) fn wayland(&self, command: PlatformCommand) {
         if self.sinks.wayland.commands.send(command).is_err() {
             error!("wayland thread is gone");
         }
@@ -200,6 +211,24 @@ impl Engine {
     }
 
     pub(super) fn send_to(&self, peer_id: PeerId, message: ControlMessage) {
+        let message = if matches!(
+            message,
+            ControlMessage::Key { .. }
+                | ControlMessage::PhysicalKey { .. }
+                | ControlMessage::Button { .. }
+                | ControlMessage::Modifiers { .. }
+        ) {
+            if let Some(epoch) = self.map.epoch {
+                ControlMessage::Map(opendesk_proto::map::MapControl::Input {
+                    epoch,
+                    message: Box::new(message),
+                })
+            } else {
+                message
+            }
+        } else {
+            message
+        };
         match self.links.link(peer_id) {
             Some(link) => self.send_on(link.connection, message),
             None => warn!(%peer_id, "dropping message to a peer without a link"),
@@ -218,7 +247,12 @@ impl Engine {
 
     pub(super) fn reconfigure_strips(&mut self) {
         self.monitor.invalidate(Instant::now());
-        self.edges.rebuild(&self.outputs, &self.config);
+        let outputs = if self.map.current.is_some() {
+            &self.outputs[..self.outputs.len().min(1)]
+        } else {
+            &self.outputs
+        };
+        self.edges.rebuild(outputs, &self.config);
         self.apply_strips();
     }
 
@@ -229,20 +263,24 @@ impl Engine {
         ) {
             return;
         }
-        let strips = self.edges.strips(&self.config, self.session.return_side());
+        let strips = self.edges.strips(
+            &self.config,
+            self.session.return_side(),
+            self.map.current.is_some(),
+        );
         if strips == self.applied_strips {
             return;
         }
         self.applied_strips = strips.clone();
-        self.wayland(WaylandCommand::ConfigureStrips { strips });
+        self.wayland(PlatformCommand::ConfigureStrips { strips });
     }
     pub(super) fn apply_hotkey(&self) {
         let hotkey = hotkey_spec(&self.config.general.release_hotkey);
-        self.wayland(WaylandCommand::SetReleaseHotkey { hotkey });
+        self.wayland(PlatformCommand::SetReleaseHotkey { hotkey });
     }
     pub(super) fn apply_bar_style(&self) {
         let style = bar_style(&self.config.general.bar_color);
-        self.wayland(WaylandCommand::SetBarStyle { style });
+        self.wayland(PlatformCommand::SetBarStyle { style });
     }
 
     pub(super) fn connected_peer_for_side(

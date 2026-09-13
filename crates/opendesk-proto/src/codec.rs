@@ -143,6 +143,7 @@ mod tests {
     fn datagrams_round_trip_and_stay_small() {
         let datagram = InputDatagram {
             header: InputHeader {
+                epoch: None,
                 session_id: 3,
                 sequence: 99,
             },

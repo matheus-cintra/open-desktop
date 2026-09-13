@@ -1,0 +1,30 @@
+[Unit]
+Description=Open Desktop physical activity notifications (no typed content)
+After=systemd-logind.service
+
+[Service]
+Type=simple
+User=opendesk-activity
+Group=opendesk-activity
+SupplementaryGroups=input
+ExecStart=/usr/bin/python3 /usr/local/libexec/opendesk-activity.py
+RuntimeDirectory=opendesk-activity
+RuntimeDirectoryMode=0755
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+DevicePolicy=closed
+DeviceAllow=char-input r
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

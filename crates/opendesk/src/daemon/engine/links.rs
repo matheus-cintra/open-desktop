@@ -11,6 +11,11 @@ const RECONNECT_MIN: Duration = Duration::from_secs(1);
 const RECONNECT_MAX: Duration = Duration::from_secs(10);
 
 pub struct PeerLink {
+    pub map_ready: bool,
+    pub input_status: String,
+    pub last_ready: Instant,
+    pub macos: bool,
+    pub file_drag: bool,
     pub connection: ConnectionId,
     pub address: SocketAddr,
     pub udp_address: SocketAddr,
@@ -33,6 +38,11 @@ impl PeerLink {
         now: Instant,
     ) -> PeerLink {
         PeerLink {
+            map_ready: false,
+            input_status: "unavailable".into(),
+            last_ready: now,
+            macos: false,
+            file_drag: false,
             connection,
             address,
             udp_address: SocketAddr::new(address.ip(), udp_port),

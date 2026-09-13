@@ -2,14 +2,14 @@ use super::*;
 use opendesk_proto::control::DenyReason;
 use opendesk_proto::transfer::DragInfo;
 
-fn commands(f: &Fixture) -> Vec<WaylandCommand> {
-    f.engine.wayland(WaylandCommand::SetKeymap {
+pub(super) fn commands(f: &Fixture) -> Vec<PlatformCommand> {
+    f.engine.wayland(PlatformCommand::SetKeymap {
         xkb: "test-barrier".into(),
     });
     let mut result = vec![];
     loop {
         let command = f.commands.recv_timeout(Duration::from_secs(1)).unwrap();
-        if matches!(&command, WaylandCommand::SetKeymap { xkb } if xkb == "test-barrier") {
+        if matches!(&command, PlatformCommand::SetKeymap { xkb } if xkb == "test-barrier") {
             break;
         }
         result.push(command);
@@ -77,14 +77,14 @@ fn unknown_and_locked_drag_denied_but_keyboard_mouse_work_while_locked() {
     let observed = commands(&f);
     assert!(observed.iter().any(|c| matches!(
         c,
-        WaylandCommand::InjectKey {
+        PlatformCommand::InjectKey {
             code: 30,
             pressed: true
         }
     )));
     assert!(observed.iter().any(|c| matches!(
         c,
-        WaylandCommand::InjectButton {
+        PlatformCommand::InjectButton {
             code: 272,
             pressed: true
         }
@@ -94,7 +94,7 @@ fn unknown_and_locked_drag_denied_but_keyboard_mouse_work_while_locked() {
     let observed = commands(&f);
     assert!(observed.iter().any(|c| matches!(
         c,
-        WaylandCommand::InjectModifiers {
+        PlatformCommand::InjectModifiers {
             depressed: 0,
             latched: 0,
             locked: 2,
@@ -103,14 +103,14 @@ fn unknown_and_locked_drag_denied_but_keyboard_mouse_work_while_locked() {
     )));
     assert!(observed.iter().any(|c| matches!(
         c,
-        WaylandCommand::InjectKey {
+        PlatformCommand::InjectKey {
             code: 30,
             pressed: false
         }
     )));
     assert!(observed.iter().any(|c| matches!(
         c,
-        WaylandCommand::InjectButton {
+        PlatformCommand::InjectButton {
             code: 272,
             pressed: false
         }
@@ -141,7 +141,7 @@ fn locking_source_stops_grab_and_releases_forwarded_inputs() {
         assert!(
             commands(&f)
                 .iter()
-                .any(|c| matches!(c, WaylandCommand::StopGrab { .. }))
+                .any(|c| matches!(c, PlatformCommand::StopGrab { .. }))
         );
         let mut releases = vec![];
         let mut key_up = false;
@@ -172,7 +172,7 @@ fn unlock_keeps_session_and_manual_pause_is_preserved() {
     f.age_arrival(Side::Left);
     f.sample(Sample::Lock(false));
     assert!(f.engine.session.is_controlled());
-    f.engine.on_wayland(WaylandEvent::EdgeEntered {
+    f.engine.on_wayland(PlatformEvent::EdgeEntered {
         side: Side::Left,
         position: -250.0,
         output: "scaled".into(),
@@ -227,7 +227,7 @@ fn one_second_without_lock_or_cursor_recovers_and_cancels_drag() {
     assert!(
         commands(&f)
             .iter()
-            .any(|c| matches!(c, WaylandCommand::CancelDropDrag))
+            .any(|c| matches!(c, PlatformCommand::CancelDropDrag))
     );
     assert_eq!(f.releases(), vec![ReleaseReason::Disabled]);
 }

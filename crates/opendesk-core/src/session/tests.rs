@@ -742,16 +742,10 @@ fn rule_17_unlisted_events_are_ignored() {
     assert_eq!(idle.state(), &SessionState::Idle);
 
     let mut pushing = pushing_session(now);
-    assert!(pushing.handle(SessionEvent::HotkeyPressed, now).is_empty());
     assert!(pushing.handle(SessionEvent::Tick, now).is_empty());
     assert!(matches!(pushing.state(), SessionState::Pushing { .. }));
 
     let mut controlled = controlled_session(now);
-    assert!(
-        controlled
-            .handle(SessionEvent::HotkeyPressed, now)
-            .is_empty()
-    );
     assert!(
         controlled
             .handle(SessionEvent::EdgeLeft { side: Side::Right }, now)
@@ -859,4 +853,23 @@ fn drag_crossed_requests_control_immediately_from_idle() {
         side: Side::Right,
         fraction: 0.5,
     }));
+}
+
+#[test]
+fn emergency_release_cancels_push_and_releases_controlled_destination() {
+    let now = Instant::now();
+    let mut pushing = pushing_session(now);
+    assert!(!pushing.handle(SessionEvent::HotkeyPressed, now).is_empty());
+    assert_eq!(pushing.state(), &SessionState::Idle);
+    let mut controlled = controlled_session(now);
+    let actions = controlled.handle(SessionEvent::HotkeyPressed, now);
+    assert_eq!(controlled.state(), &SessionState::Idle);
+    assert!(actions.contains(&SessionAction::ReleaseAllPressed));
+    assert!(actions.iter().any(|action| matches!(
+        action,
+        SessionAction::SendReleaseControl {
+            reason: ReleaseReason::Hotkey,
+            ..
+        }
+    )));
 }

@@ -8,6 +8,15 @@ use crate::daemon::ipc::{DiscoveredPeerReport, IpcRequest, IpcResponse, PeerStat
 impl Engine {
     pub(super) fn on_ipc(&mut self, request: IpcRequest, reply: oneshot::Sender<IpcResponse>) {
         let response = match request {
+            IpcRequest::MapGet => IpcResponse::Map(self.map_report()),
+            IpcRequest::MapApply { base, map } => self.apply_map(base, map),
+            IpcRequest::Identify => {
+                self.identify_local();
+                self.broadcast(opendesk_proto::control::ControlMessage::Map(
+                    opendesk_proto::map::MapControl::Identify,
+                ));
+                IpcResponse::Ok
+            }
             IpcRequest::Status => IpcResponse::Status(self.status_report()),
             IpcRequest::Discover => IpcResponse::Discovered(self.discovered_report()),
             IpcRequest::Pair { name } => return self.start_pairing(&name, reply),
@@ -15,7 +24,7 @@ impl Engine {
             IpcRequest::PeerSet { name, side } => self.set_peer_side(&name, &side),
             IpcRequest::PeerRemove { name } => self.remove_peer(&name),
             IpcRequest::Release => {
-                self.dispatch(SessionEvent::HotkeyPressed);
+                self.stop_map_control();
                 IpcResponse::Ok
             }
             IpcRequest::Enable => {
@@ -24,6 +33,7 @@ impl Engine {
             }
             IpcRequest::Disable => {
                 self.enabled = false;
+                self.stop_map_control();
                 self.dispatch(SessionEvent::Disabled);
                 IpcResponse::Ok
             }
@@ -50,6 +60,8 @@ impl Engine {
             })
             .collect();
         StatusReport {
+            platform: std::env::consts::OS.to_owned(),
+            input_status: self.input_status().to_owned(),
             name: self.identity.name.clone(),
             peer_id: self.identity.peer_id.to_hex(),
             state: state_name(self.session.state()).to_owned(),

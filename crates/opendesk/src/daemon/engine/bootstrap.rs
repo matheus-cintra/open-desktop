@@ -1,13 +1,19 @@
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::time::Duration;
+use std::time::Instant;
 
+use crate::platform::{BarStyle, HotkeySpec};
 use anyhow::Context;
 use opendesk_core::color::Rgba;
 use opendesk_core::config::Config;
 use opendesk_core::hotkey::Hotkey;
 use opendesk_core::peers::PeerStore;
-use opendesk_wayland::{BarStyle, HotkeySpec};
+#[cfg(target_os = "linux")]
 use tokio::io::{AsyncBufReadExt, BufReader};
+#[cfg(target_os = "linux")]
 use tokio::net::UnixStream;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{mpsc, oneshot};
@@ -34,6 +40,12 @@ pub async fn run_daemon() -> anyhow::Result<()> {
     let config_path = Config::default_path()?;
     let config =
         Config::load(&config_path).with_context(|| format!("loading {}", config_path.display()))?;
+    opendesk_core::desktop_map::load(&config_path.with_file_name("map.json"))
+        .map_err(anyhow::Error::msg)?;
+    opendesk_core::desktop_map::load_control_clock(
+        &config_path.with_file_name("control-clock.json"),
+    )
+    .map_err(anyhow::Error::msg)?;
     let peers_path = PeerStore::default_path()?;
     let peer_store = PeerStore::load(&peers_path)
         .with_context(|| format!("loading {}", peers_path.display()))?;
@@ -51,7 +63,7 @@ pub async fn run_daemon() -> anyhow::Result<()> {
     info!(name = %identity.name, %peer_id, port = identity.port, "daemon starting");
 
     let (wayland_sender, wayland_events) = mpsc::unbounded_channel();
-    let wayland = opendesk_wayland::spawn(wayland_sender).context("starting the wayland thread")?;
+    let wayland = crate::platform::spawn(wayland_sender).context("starting the wayland thread")?;
     let (tcp_sender, tcp_events) = mpsc::unbounded_channel();
     let tcp = spawn_tcp(identity.port, tcp_sender).await?;
     let (udp_sender, udp_events) = mpsc::unbounded_channel();
@@ -100,6 +112,7 @@ pub async fn run_daemon() -> anyhow::Result<()> {
     outcome
 }
 
+#[cfg(target_os = "linux")]
 async fn spawn_compositor_listener() -> anyhow::Result<mpsc::UnboundedReceiver<CompositorEvent>> {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
@@ -201,4 +214,10 @@ pub(super) fn bar_style(color: &Rgba) -> BarStyle {
         blue: color.blue,
         alpha: color.alpha,
     }
+}
+
+#[cfg(target_os = "macos")]
+async fn spawn_compositor_listener() -> anyhow::Result<mpsc::UnboundedReceiver<CompositorEvent>> {
+    let (_sender, receiver) = mpsc::unbounded_channel();
+    Ok(receiver)
 }

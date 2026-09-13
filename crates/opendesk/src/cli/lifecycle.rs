@@ -5,6 +5,11 @@ use anyhow::{Context, bail};
 
 const INSTALLER: &str = include_str!("../../../../scripts/install-user.sh");
 const BOOTSTRAP: &str = include_str!("../../../../install.sh");
+const DESKTOP: &str = include_str!("../../../../packaging/opendesk.desktop");
+const ACTIVITY_INSTALLER: &str = include_str!("../../../../scripts/install-activity.sh");
+const ACTIVITY: &str = include_str!("../../../../packaging/activity/opendesk-activity.py");
+const ACTIVITY_UNIT: &str =
+    include_str!("../../../../packaging/activity/opendesk-activity.service");
 const UNIT: &str = include_str!("../../../../packaging/opendesk.service");
 
 struct Stage(PathBuf);
@@ -42,6 +47,8 @@ pub fn install(action: &str) -> anyhow::Result<()> {
     let script = stage.0.join("scripts/install-user.sh");
     std::fs::write(&script, INSTALLER)?;
     std::fs::write(stage.0.join("packaging/opendesk.service"), UNIT)?;
+    std::fs::write(stage.0.join("packaging/opendesk.desktop"), DESKTOP)?;
+    stage_activity(&stage)?;
     checked(
         Command::new("bash")
             .arg(script)
@@ -72,8 +79,9 @@ pub fn update(version: Option<&str>) -> anyhow::Result<()> {
 
 pub async fn doctor() -> anyhow::Result<()> {
     println!(
-        "Open Desktop {} · Linux x86_64 · protocolo 2",
-        env!("CARGO_PKG_VERSION")
+        "Open Desktop {} · Linux x86_64 · protocolo {}",
+        env!("CARGO_PKG_VERSION"),
+        opendesk_proto::PROTOCOL_VERSION
     );
     let mut failures = 0;
     for (label, program, args) in [
@@ -156,4 +164,32 @@ pub async fn doctor() -> anyhow::Result<()> {
         bail!("{failures} verificações falharam");
     }
     Ok(())
+}
+
+fn stage_activity(stage: &Stage) -> anyhow::Result<()> {
+    std::fs::create_dir_all(stage.0.join("scripts"))?;
+    std::fs::create_dir_all(stage.0.join("packaging/activity"))?;
+    std::fs::write(
+        stage.0.join("scripts/install-activity.sh"),
+        ACTIVITY_INSTALLER,
+    )?;
+    std::fs::write(
+        stage.0.join("packaging/activity/opendesk-activity.py"),
+        ACTIVITY,
+    )?;
+    std::fs::write(
+        stage.0.join("packaging/activity/opendesk-activity.service"),
+        ACTIVITY_UNIT,
+    )?;
+    Ok(())
+}
+pub fn activity(action: &str) -> anyhow::Result<()> {
+    let stage = Stage::new()?;
+    stage_activity(&stage)?;
+    checked(
+        Command::new("sudo")
+            .arg("bash")
+            .arg(stage.0.join("scripts/install-activity.sh"))
+            .arg(action),
+    )
 }

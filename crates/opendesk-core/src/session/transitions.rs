@@ -120,7 +120,7 @@ pub(super) fn from_pushing(
             let accumulated_px = accumulated_px + outward_motion(side, dx, dy);
             push_progress(session, side, fraction, peer, accumulated_px, now)
         }
-        SessionEvent::EdgeLeft { .. } | SessionEvent::Disabled => {
+        SessionEvent::EdgeLeft { .. } | SessionEvent::Disabled | SessionEvent::HotkeyPressed => {
             (SessionState::Idle, cancel_push(side, fraction))
         }
         SessionEvent::PeerRequestedControl {
@@ -234,7 +234,7 @@ pub(super) fn from_requesting(
         ),
         SessionEvent::PeerDenied { peer: denier } if denier == peer => abort(),
         SessionEvent::PeerDisconnected { peer: gone } if gone == peer => abort(),
-        SessionEvent::Disabled => {
+        SessionEvent::Disabled | SessionEvent::HotkeyPressed => {
             let (state, mut actions) = abort();
             actions.insert(
                 0,

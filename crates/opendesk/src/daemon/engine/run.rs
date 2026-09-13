@@ -2,6 +2,7 @@ use super::*;
 
 impl Engine {
     pub async fn run(mut self, mut channels: EngineChannels) -> anyhow::Result<()> {
+        let mut physical_activity = super::activity::spawn();
         self.apply_hotkey();
         self.apply_bar_style();
         let (monitor_requests, mut monitor_events) =
@@ -10,6 +11,7 @@ impl Engine {
         let mut ticker = tokio::time::interval(TICK);
         let outcome = loop {
             tokio::select! {
+                Some(()) = physical_activity.recv() => self.claim_physical(),
                 Some(event) = channels.wayland_events.recv() => self.on_wayland(event),
                 Some(event) = channels.tcp_events.recv() => self.on_tcp(event),
                 Some(event) = channels.udp_events.recv() => self.on_udp(event),
@@ -20,7 +22,7 @@ impl Engine {
                 }
                 Some(event) = channels.compositor_events.recv() => match event {
                     CompositorEvent::LeftReleased(at) => self.on_left_released(at),
-                    CompositorEvent::EmergencyRelease => self.dispatch(SessionEvent::HotkeyPressed),
+                    CompositorEvent::EmergencyRelease => self.stop_map_control(),
                 },
                 Some(event) = monitor_events.recv() => self.on_monitor(event),
                 _ = monitor_tick.tick() => self.poll_compositor(Instant::now(), &monitor_requests),
@@ -31,6 +33,7 @@ impl Engine {
                 break Err(anyhow::anyhow!(message));
             }
         };
+        self.dispatch(SessionEvent::HotkeyPressed);
         if let Err(error) = self.sinks.wayland.shutdown() {
             warn!(%error, "wayland thread did not shut down cleanly");
         }

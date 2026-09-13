@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
+use crate::platform::PlatformCommand;
 use opendesk_core::session::SessionState;
 use opendesk_proto::control::PeerId;
 use opendesk_proto::transfer::{DragInfo, FileBegin, FileChunk, FileEnd};
-use opendesk_wayland::WaylandCommand;
 use tracing::{debug, warn};
 
 use super::Engine;
@@ -41,7 +41,8 @@ impl Engine {
     }
 
     pub(super) fn on_file_begin(&mut self, peer: PeerId, begin: FileBegin) {
-        if self.monitor.lock != super::monitor::LockState::Unlocked
+        if !self.supports_drag(peer)
+            || self.monitor.lock != super::monitor::LockState::Unlocked
             || !self.monitor.known(Instant::now())
         {
             self.send_to(
@@ -108,9 +109,9 @@ impl Engine {
         self.next_drop_id = self.next_drop_id.wrapping_add(1);
         self.active_drop_id = Some(id);
         self.return_drop_active = authorized_return;
-        self.wayland(WaylandCommand::StartDropDrag { id, uris });
+        self.wayland(PlatformCommand::StartDropDrag { id, uris });
         if release_requested {
-            self.wayland(WaylandCommand::ReleaseDropDrag { id });
+            self.wayland(PlatformCommand::ReleaseDropDrag { id });
         }
     }
 
@@ -154,7 +155,7 @@ impl Engine {
         {
             self.incoming_drag = None;
         }
-        self.wayland(WaylandCommand::CancelDropDrag);
+        self.wayland(PlatformCommand::CancelDropDrag);
     }
 
     pub(super) fn cancel_active_drop(&mut self) {
@@ -167,7 +168,7 @@ impl Engine {
             self.return_drop_active = false;
             self.return_drop_since = None;
             self.drop_accumulator.cancel(transfer_id);
-            self.wayland(WaylandCommand::CancelDropDrag);
+            self.wayland(PlatformCommand::CancelDropDrag);
         }
     }
 

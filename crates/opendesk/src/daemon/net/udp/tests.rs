@@ -25,6 +25,7 @@ async fn datagram_sent_from_one_actor_arrives_at_the_other() {
 
     let datagram = InputDatagram {
         header: InputHeader {
+            epoch: None,
             session_id: 4,
             sequence: 12,
         },

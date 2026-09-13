@@ -30,6 +30,7 @@ jobs:
           bash scripts/check-file-length.sh
           bash test/install-user-sandbox.sh
           python3 test/bootstrap.py
+          python3 test/activity_helper_test.py
           cargo build --bin opendesk --locked
           python3 test/setup-cli.py
       - name: Build and package
@@ -43,4 +44,4 @@ jobs:
           prerelease=()
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" dist/open-desktop-linux-x86_64.tar.gz dist/SHA256SUMS dist/install.sh \
-            --verify-tag --title "Open Desktop $GITHUB_REF_NAME" --generate-notes "${prerelease[@]}"
+            --draft --verify-tag --title "Open Desktop $GITHUB_REF_NAME" --generate-notes "${prerelease[@]}"

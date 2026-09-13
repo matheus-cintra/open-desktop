@@ -1,5 +1,5 @@
+use crate::platform::{ClipboardContent, PlatformCommand};
 use opendesk_proto::control::ControlMessage;
-use opendesk_wayland::{ClipboardContent, WaylandCommand};
 use sha2::{Digest, Sha256};
 use tracing::debug;
 
@@ -51,7 +51,7 @@ impl Engine {
         }
         self.clipboard_hash = Some(hash);
         debug!(mime, bytes = bytes.len(), "applying clipboard from a peer");
-        self.wayland(WaylandCommand::SetClipboard {
+        self.wayland(PlatformCommand::SetClipboard {
             content: ClipboardContent { mime, bytes },
         });
     }

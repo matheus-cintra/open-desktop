@@ -1,8 +1,11 @@
 use std::process::ExitCode;
 
+#[cfg(target_os = "linux")]
 use clap::Parser;
+#[cfg(target_os = "linux")]
 use tracing_subscriber::EnvFilter;
 
+#[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> ExitCode {
     opendesk::i18n::init_locale_from_env();
@@ -17,6 +20,7 @@ async fn main() -> ExitCode {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let builder = tracing_subscriber::fmt()
@@ -27,4 +31,9 @@ fn init_tracing() {
     } else {
         builder.init();
     }
+}
+
+#[cfg(target_os = "macos")]
+fn main() -> ExitCode {
+    opendesk::macos_app::main()
 }

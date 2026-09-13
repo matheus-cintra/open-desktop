@@ -18,7 +18,10 @@ const CONFIG_SETTLE: Duration = Duration::from_millis(300);
 
 impl Engine {
     pub(super) fn on_tick(&mut self, now: Instant) {
-        self.dispatch(SessionEvent::Tick);
+        self.tick_map(now);
+        if self.map.pending.is_none() {
+            self.dispatch(SessionEvent::Tick);
+        }
         self.tick_drag(now);
         self.expire_return_drag(now);
         self.expire_pairing(now);
@@ -114,7 +117,9 @@ impl Engine {
     }
 
     fn detect_udp_silence(&mut self, now: Instant) {
-        if !self.session.is_controlled() {
+        // Map sessions use the generation-scoped renewal lease in tick_map.
+        // last_udp belongs to the link and may predate a newly committed handoff.
+        if self.map.current.is_some() || !self.session.is_controlled() {
             return;
         }
         let Some(peer) = self.active_peer else {

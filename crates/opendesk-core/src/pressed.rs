@@ -39,6 +39,22 @@ impl PressedInputs {
             .collect()
     }
 
+    pub fn can_transfer(&self) -> bool {
+        self.buttons.is_empty()
+            && self
+                .keys
+                .iter()
+                .all(|c| matches!(c, 29 | 42 | 54 | 56 | 97 | 100 | 125 | 126))
+    }
+
+    pub fn modifiers(&self) -> Vec<u32> {
+        self.keys
+            .iter()
+            .copied()
+            .filter(|c| matches!(c, 29 | 42 | 54 | 56 | 97 | 100 | 125 | 126))
+            .collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty() && self.buttons.is_empty()
     }

@@ -1,16 +1,29 @@
 use std::time::Instant;
 
+use crate::platform::{PlatformCommand, PlatformEvent};
 use opendesk_core::session::SessionState;
 use opendesk_proto::control::{ControlMessage, PeerId};
 use opendesk_proto::input::{InputDatagram, InputEvent, InputHeader};
-use opendesk_wayland::{WaylandCommand, WaylandEvent};
 use tracing::debug;
 
 use super::Engine;
 use crate::daemon::net::udp::{UdpCommand, UdpEvent};
 
 impl Engine {
-    pub(super) fn forward_wayland_input(&mut self, event: WaylandEvent) {
+    pub(super) fn forward_wayland_input(&mut self, event: PlatformEvent) {
+        if self.map.pending.is_some() {
+            match event {
+                PlatformEvent::Key { code, pressed } => self.forwarded.record_key(code, pressed),
+                PlatformEvent::Button { code, pressed } => {
+                    self.forwarded.record_button(code, pressed)
+                }
+                _ => {}
+            }
+            if !self.forwarded.can_transfer() {
+                self.stop_map_control();
+            }
+            return;
+        }
         if !self.session.is_controlling() {
             return;
         }
@@ -18,10 +31,10 @@ impl Engine {
             return;
         };
         match event {
-            WaylandEvent::RelativeMotion { dx, dy } => {
+            PlatformEvent::RelativeMotion { dx, dy } => {
                 self.send_udp(peer, InputEvent::Motion { dx, dy });
             }
-            WaylandEvent::Axis {
+            PlatformEvent::Axis {
                 axis,
                 value,
                 value120,
@@ -37,7 +50,7 @@ impl Engine {
                     },
                 );
             }
-            WaylandEvent::Button { code, pressed } => {
+            PlatformEvent::Button { code, pressed } => {
                 debug!(code, pressed, "forwarding pointer button");
                 if code == 272 {
                     if pressed {
@@ -53,16 +66,19 @@ impl Engine {
                 self.forwarded.record_button(code, pressed);
                 self.send_to(peer, ControlMessage::Button { code, pressed });
             }
-            WaylandEvent::Key { code, pressed } => {
+            PlatformEvent::Key { code, pressed } => {
                 self.forwarded.record_key(code, pressed);
-                self.send_to(peer, ControlMessage::Key { code, pressed });
+                self.send_to(peer, self.key_message(peer, code, pressed));
             }
-            WaylandEvent::Modifiers {
+            PlatformEvent::Modifiers {
                 depressed,
                 latched,
                 locked,
                 group,
             } => {
+                if self.cross_platform(peer) {
+                    return;
+                }
                 self.send_to(
                     peer,
                     ControlMessage::Modifiers {
@@ -78,6 +94,12 @@ impl Engine {
     }
 
     pub(super) fn on_left_released(&mut self, at: Instant) {
+        if self.map.pending.as_ref().is_some_and(|p| p.old.is_none())
+            && self.outgoing_drag.is_some()
+        {
+            self.map.drag_released = true;
+            return;
+        }
         debug!(
             controlling = self.session.is_controlling(),
             return_drop = self.return_drop_active,
@@ -95,7 +117,7 @@ impl Engine {
             && self.return_drop_since.is_some_and(|since| at >= since)
             && let Some(id) = self.active_drop_id
         {
-            self.wayland(WaylandCommand::ReleaseDropDrag { id });
+            self.wayland(PlatformCommand::ReleaseDropDrag { id });
             return;
         }
         if !self.session.is_controlling()
@@ -144,7 +166,7 @@ impl Engine {
                 pressed: false,
             },
         );
-        self.wayland(WaylandCommand::StartGrab);
+        self.wayland(PlatformCommand::StartGrab);
         true
     }
 
@@ -159,6 +181,7 @@ impl Engine {
         let datagram = InputDatagram {
             header: InputHeader {
                 session_id,
+                epoch: self.map.epoch,
                 sequence,
             },
             event,
@@ -174,14 +197,22 @@ impl Engine {
             return;
         }
         match message {
-            ControlMessage::Key { code, pressed } => {
+            ControlMessage::PhysicalKey { usage, pressed } if self.cross_platform(peer) => {
+                self.injected_physical = true;
+                let usage = opendesk_proto::keyboard::swap_control_super(usage);
+                if let Some(code) = opendesk_proto::keyboard::hid_to_evdev(usage) {
+                    self.injected.record_key(code, pressed);
+                    self.wayland(PlatformCommand::InjectPhysicalKey { code, pressed });
+                }
+            }
+            ControlMessage::Key { code, pressed } if !self.cross_platform(peer) => {
                 self.injected.record_key(code, pressed);
-                self.wayland(WaylandCommand::InjectKey { code, pressed });
+                self.wayland(PlatformCommand::InjectKey { code, pressed });
             }
             ControlMessage::Button { code, pressed } => {
                 debug!(code, pressed, "injecting forwarded pointer button");
                 self.injected.record_button(code, pressed);
-                self.wayland(WaylandCommand::InjectButton { code, pressed });
+                self.wayland(PlatformCommand::InjectButton { code, pressed });
                 if !pressed {
                     let active_transfer = self.active_drop;
                     if code == 272
@@ -193,7 +224,7 @@ impl Engine {
                             && self.active_drop_peer == Some(peer)
                             && active_transfer == Some(*transfer_id)
                         {
-                            self.wayland(WaylandCommand::ReleaseDropDrag { id });
+                            self.wayland(PlatformCommand::ReleaseDropDrag { id });
                         }
                     }
                 }
@@ -203,9 +234,9 @@ impl Engine {
                 latched,
                 locked,
                 group,
-            } => {
+            } if !self.cross_platform(peer) => {
                 self.injected_locks = (locked, group);
-                self.wayland(WaylandCommand::InjectModifiers {
+                self.wayland(PlatformCommand::InjectModifiers {
                     depressed,
                     latched,
                     locked,
@@ -225,6 +256,12 @@ impl Engine {
         if !self.session.is_controlled() || self.active_peer != Some(peer) {
             return;
         }
+        if datagram.header.epoch != self.map.epoch
+            || self.map.epoch.is_some()
+                && self.map.last_renew.elapsed() >= std::time::Duration::from_secs(1)
+        {
+            return;
+        }
         let Some(link) = self.links.link_mut(peer) else {
             return;
         };
@@ -236,8 +273,36 @@ impl Engine {
         link.last_udp = Instant::now();
         match datagram.event {
             InputEvent::Motion { dx, dy } => {
-                self.wayland(WaylandCommand::InjectMotion { dx, dy });
-                self.locked_motion(dx, dy);
+                self.wayland(PlatformCommand::InjectMotion { dx, dy });
+                if self.map.current.is_none() {
+                    self.locked_motion(dx, dy);
+                }
+                if let Some((side, fraction, accumulated)) = self.map.edge_since {
+                    let outward = match side {
+                        opendesk_proto::control::Side::Left => -dx,
+                        opendesk_proto::control::Side::Right => dx,
+                        opendesk_proto::control::Side::Top => -dy,
+                        opendesk_proto::control::Side::Bottom => dy,
+                    };
+                    let total = accumulated + outward;
+                    if total < -self.config.general.edge_cancel_px {
+                        self.map.edge_since = None;
+                    } else if total >= self.config.general.edge_threshold_px {
+                        self.map.edge_since = None;
+                        if let Some(epoch) = self.map.epoch {
+                            self.send_to(
+                                peer,
+                                ControlMessage::Map(opendesk_proto::map::MapControl::Edge {
+                                    epoch,
+                                    side,
+                                    fraction,
+                                }),
+                            );
+                        }
+                    } else {
+                        self.map.edge_since = Some((side, fraction, total));
+                    }
+                }
             }
             InputEvent::Axis {
                 axis,
@@ -245,7 +310,7 @@ impl Engine {
                 value120,
                 source,
             } => {
-                self.wayland(WaylandCommand::InjectAxis {
+                self.wayland(PlatformCommand::InjectAxis {
                     axis,
                     value,
                     value120,

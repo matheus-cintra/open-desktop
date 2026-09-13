@@ -219,6 +219,15 @@ pub enum ControlMessage {
     ReturnDrag {
         drag: DragInfo,
     },
+    Capabilities {
+        macos: bool,
+        file_drag: bool,
+    },
+    Map(crate::map::MapControl),
+    PhysicalKey {
+        usage: u16,
+        pressed: bool,
+    },
 }
 
 #[cfg(test)]

@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
+use crate::platform::PlatformCommand;
 use opendesk_core::session::{SessionEvent, SessionState};
 use opendesk_proto::control::{PeerId, Side};
-use opendesk_wayland::WaylandCommand;
 use tracing::{debug, warn};
 
 use super::Engine;
@@ -40,9 +40,22 @@ impl Engine {
         if generation != self.drag_generation() {
             return;
         }
-        let Some(peer) = self.connected_peer_for_side(side) else {
+        let destination = if self.map.current.is_some() {
+            self.map_destination(
+                self.identity.peer_id,
+                side,
+                self.edges.fraction(side, position).unwrap_or(0.5),
+            )
+            .map(|c| c.peer)
+        } else {
+            self.connected_peer_for_side(side)
+        };
+        let Some(peer) = destination else {
             return;
         };
+        if !self.supports_drag(peer) {
+            return;
+        }
         self.cancel_pending_drag();
         debug!(%side, files = uris.len(), "drag reached the edge");
         let id = self.next_transfer_id;
@@ -120,7 +133,7 @@ impl Engine {
             return;
         }
         drag.aborted_at = Some(Instant::now());
-        self.wayland(WaylandCommand::AbortLocalDrag);
+        self.wayland(PlatformCommand::AbortLocalDrag);
     }
 
     pub(super) fn tick_drag(&mut self, now: Instant) {
@@ -133,7 +146,7 @@ impl Engine {
         }
         match (drag.preparing_at, drag.aborted_at) {
             (None, None) if now.saturating_duration_since(drag.since) >= DWELL => {
-                self.wayland(WaylandCommand::PrepareDragFocus { id: drag.id });
+                self.wayland(PlatformCommand::PrepareDragFocus { id: drag.id });
                 if let Some(drag) = self.pending_drag.as_mut() {
                     drag.preparing_at = Some(now);
                 }
@@ -162,7 +175,13 @@ impl Engine {
         let id = drag.id;
         let peer = drag.peer;
         let uris = drag.uris.clone();
-        if self.connected_peer_for_side(side) != Some(peer) {
+        let destination = if self.map.current.is_some() {
+            self.map_destination(self.identity.peer_id, side, fraction)
+                .map(|c| c.peer)
+        } else {
+            self.connected_peer_for_side(side)
+        };
+        if destination != Some(peer) {
             self.cancel_pending_drag();
             return false;
         }
@@ -180,7 +199,7 @@ impl Engine {
             }
             Err(error) => {
                 warn!(%error, "could not plan the file transfer");
-                self.wayland(WaylandCommand::CancelDragFocus { id });
+                self.wayland(PlatformCommand::CancelDragFocus { id });
                 false
             }
         }
@@ -190,13 +209,13 @@ impl Engine {
         if let Some(drag) = self.pending_drag.take()
             && drag.preparing_at.is_some()
         {
-            self.wayland(WaylandCommand::CancelDragFocus { id: drag.id });
+            self.wayland(PlatformCommand::CancelDragFocus { id: drag.id });
         }
     }
 
     pub(super) fn abort_pending_drag(&mut self) {
         if self.pending_drag.is_some() {
-            self.wayland(WaylandCommand::AbortLocalDrag);
+            self.wayland(PlatformCommand::AbortLocalDrag);
             self.cancel_pending_drag();
         }
     }

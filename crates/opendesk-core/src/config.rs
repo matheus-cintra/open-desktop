@@ -82,6 +82,16 @@ impl Default for General {
 }
 
 fn local_hostname() -> String {
+    #[cfg(target_os = "macos")]
+    if let Ok(output) = std::process::Command::new("/usr/sbin/scutil")
+        .args(["--get", "LocalHostName"])
+        .output()
+        && output.status.success()
+        && let Ok(name) = String::from_utf8(output.stdout)
+    {
+        return name.trim().to_owned();
+    }
+
     std::fs::read_to_string("/etc/hostname")
         .ok()
         .map(|content| content.trim().to_owned())
