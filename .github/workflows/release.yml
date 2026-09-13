@@ -1,0 +1,46 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev pkg-config
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.98.0
+      - name: Validate
+        run: |
+          cargo fmt --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --locked
+          bash scripts/check-file-length.sh
+          bash test/install-user-sandbox.sh
+          python3 test/bootstrap.py
+          cargo build --bin opendesk --locked
+          python3 test/setup-cli.py
+      - name: Build and package
+        run: |
+          cargo build --release --locked
+          bash scripts/package-release.sh "$GITHUB_REF_NAME"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/open-desktop-linux-x86_64.tar.gz dist/SHA256SUMS dist/install.sh \
+            --verify-tag --title "Open Desktop $GITHUB_REF_NAME" --generate-notes "${prerelease[@]}"

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320">
+<rect width="900" height="320" rx="20" fill="#111421"/>
+<g font-family="sans-serif" text-anchor="middle"><text x="450" y="43" fill="#e9e6ff" font-size="22">Dois computadores. Um fluxo.</text>
+<rect x="55" y="77" width="300" height="166" rx="12" fill="#1d2235" stroke="#b2a1ff" stroke-width="2"/>
+<rect x="545" y="97" width="290" height="165" rx="12" fill="#1a2932" stroke="#74e1d0" stroke-width="2"/>
+<text x="205" y="145" fill="#e9e6ff" font-size="23">Desktop</text><text x="690" y="164" fill="#c2f5eb" font-size="23">Notebook</text>
+<text x="205" y="180" fill="#b0b7ca" font-size="15">CachyOS · Hyprland</text><text x="690" y="197" fill="#b0b7ca" font-size="15">Arch Linux · Hyprland</text>
+<path d="M374 160h151m-12-9 12 9-12 9m-127-18-12 9 12 9" stroke="#74e1d0" stroke-width="3" fill="none"/>
+<text x="450" y="198" fill="#b0b7ca" font-size="14">mesma rede</text>
+<text x="450" y="295" fill="#b0b7ca" font-size="15">Mouse e teclado · Texto e imagens · Arrasto de arquivos</text></g>
+</svg>

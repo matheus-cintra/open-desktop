@@ -6,11 +6,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sandbox="$(mktemp -d)"
 trap 'rm -rf "$sandbox"' EXIT
 
-home="$sandbox/home"
+test_home="$sandbox/home"
 config="$sandbox/config"
 data="$sandbox/data"
 stub_bin="$sandbox/bin"
-mkdir -p "$home" "$config/hypr" "$data" "$stub_bin"
+mkdir -p "$test_home" "$config/hypr" "$data" "$stub_bin"
+
+printf '#!/bin/sh\nexit 0\n' >"$stub_bin/hyprctl"
+chmod +x "$stub_bin/hyprctl"
 
 cat >"$stub_bin/systemctl" <<'SH'
 #!/usr/bin/env bash
@@ -34,13 +37,13 @@ printf '#!/usr/bin/env bash\nexit 0\n' >"$source_bin"
 chmod +x "$source_bin"
 hypr_config="$config/hypr/hyprland.lua"
 printf '%s\n' 'monitor = "example"' >"$hypr_config"
-mkdir -p "$home/.local/bin" "$config/systemd/user" "$config/hypr/conf"
-printf '%s\n' 'old-bin' >"$home/.local/bin/opendesk"
+mkdir -p "$test_home/.local/bin" "$config/systemd/user" "$config/hypr/conf"
+printf '%s\n' 'old-bin' >"$test_home/.local/bin/opendesk"
 printf '%s\n' 'old-unit' >"$config/systemd/user/opendesk.service"
 printf '%s\n' 'old-module' >"$config/hypr/conf/opendesk.lua"
 
 run() {
-  env HOME="$home" XDG_CONFIG_HOME="$config" XDG_DATA_HOME="$data" \
+  env HOME="$test_home" XDG_CONFIG_HOME="$config" XDG_DATA_HOME="$data" \
     OPENDESK_BIN="$source_bin" PATH="$stub_bin:$PATH" SYSTEMCTL_LOG="$sandbox/systemctl.log" SYSTEMD_RUN_LOG="$sandbox/systemd-run.log" \
     "$root/scripts/install-user.sh" "$@"
 }
@@ -50,7 +53,7 @@ check() { "$@" || fail "$*"; }
 count_managed() { grep -Fc 'require("conf/opendesk")  -- managed-by opendesk' "$hypr_config"; }
 
 run install
-check cmp -s "$home/.local/bin/opendesk" "$source_bin"
+check cmp -s "$test_home/.local/bin/opendesk" "$source_bin"
 check test -f "$config/systemd/user/opendesk.service"
 check test -f "$config/hypr/conf/opendesk.lua"
 check grep -Fq 'hl.layer_rule' "$config/hypr/conf/opendesk.lua"
@@ -61,21 +64,32 @@ backup="$(<"$backup_pointer")"
 check cmp -s "$backup" <(printf '%s\n' 'monitor = "example"')
 first_install_backup="$(<"$data/opendesk/backups/latest-install-backup")"
 check test -f "$first_install_backup/replaced-paths"
-check grep -Fx "$home/.local/bin/opendesk" "$first_install_backup/replaced-paths"
+check grep -Fx "$test_home/.local/bin/opendesk" "$first_install_backup/replaced-paths"
 check grep -Fx "$config/systemd/user/opendesk.service" "$first_install_backup/replaced-paths"
 check grep -Fx "$config/hypr/conf/opendesk.lua" "$first_install_backup/replaced-paths"
 check grep -Fx "$hypr_config" "$first_install_backup/replaced-paths"
 
+mkdir -p "$config/opendesk"
+printf 'identity-sentinel\n' > "$config/opendesk/identity.toml"
+printf 'pairing-sentinel\n' > "$config/opendesk/peers.toml"
+# A running ELF executable cannot be overwritten in-place (ETXTBSY).
+cp /usr/bin/sleep "$test_home/.local/bin/opendesk"
+"$test_home/.local/bin/opendesk" 10 >/dev/null 2>&1 &
+running_binary=$!
 run install
+kill "$running_binary" 2>/dev/null || true
+wait "$running_binary" 2>/dev/null || true
 check test "$(count_managed)" -eq 1
-check cmp -s "$home/.local/bin/opendesk" "$source_bin"
+check cmp -s "$test_home/.local/bin/opendesk" "$source_bin"
 
 printf '%s\n' 'mutated after install' >>"$hypr_config"
 run rollback-hyprland
 check cmp -s "$hypr_config" <(printf '%s\n' 'monitor = "example"')
 
 run uninstall
-check cmp -s "$home/.local/bin/opendesk" <(printf '%s\n' 'old-bin')
+check cmp -s "$config/opendesk/identity.toml" <(printf 'identity-sentinel\n')
+check cmp -s "$config/opendesk/peers.toml" <(printf 'pairing-sentinel\n')
+check cmp -s "$test_home/.local/bin/opendesk" <(printf '%s\n' 'old-bin')
 check cmp -s "$config/systemd/user/opendesk.service" <(printf '%s\n' 'old-unit')
 check cmp -s "$config/hypr/conf/opendesk.lua" <(printf '%s\n' 'old-module')
 check test "$(count_managed)" -eq 0
@@ -86,7 +100,7 @@ failed_data="$sandbox/failed-data"
 mkdir -p "$failed_home" "$failed_config/hypr" "$failed_data"
 printf '%s\n' 'unchanged' >"$failed_config/hypr/hyprland.lua"
 if env HOME="$failed_home" XDG_CONFIG_HOME="$failed_config" XDG_DATA_HOME="$failed_data" \
-  PATH="$stub_bin:$PATH" SYSTEMCTL_LOG="$sandbox/systemctl.log" SYSTEMD_RUN_LOG="$sandbox/systemd-run.log" "$root/scripts/install-user.sh" install; then
+  OPENDESK_BIN=/nonexistent PATH="$stub_bin:$PATH" SYSTEMCTL_LOG="$sandbox/systemctl.log" SYSTEMD_RUN_LOG="$sandbox/systemd-run.log" "$root/scripts/install-user.sh" install; then
   fail 'install without OPENDESK_BIN unexpectedly succeeded'
 fi
 check cmp -s "$failed_config/hypr/hyprland.lua" <(printf '%s\n' 'unchanged')

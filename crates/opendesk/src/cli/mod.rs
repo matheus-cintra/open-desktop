@@ -1,5 +1,7 @@
+mod lifecycle;
 pub mod pair;
 pub mod peer;
+mod setup;
 pub mod simple;
 pub mod status;
 
@@ -24,6 +26,24 @@ pub struct Cli {
 pub enum Command {
     #[command(about = "Run the daemon in the foreground")]
     Daemon,
+    /// Configure this computer and pair interactively
+    Setup,
+    /// Install this binary and the Hyprland integration for your user
+    Install,
+    /// Start the background service
+    Start,
+    /// Stop the background service
+    Stop,
+    /// Restart the background service
+    Restart,
+    /// Check installation and graphical session
+    Doctor,
+    /// Follow service logs (Ctrl+C to exit)
+    Logs,
+    /// Install the latest release, or a specific version
+    Update { version: Option<String> },
+    /// Uninstall; preserve identity, pairing and configuration
+    Uninstall,
     #[command(about = "Show the daemon state and the configured peers")]
     Status,
     #[command(about = "List opendesk peers found on the local network")]
@@ -37,9 +57,9 @@ pub enum Command {
     },
     #[command(about = "Release control and bring the cursor back")]
     Release,
-    #[command(about = "Enable edge crossing")]
+    #[command(name = "resume", alias = "enable", about = "Enable edge crossing")]
     Enable,
-    #[command(about = "Disable edge crossing")]
+    #[command(name = "pause", alias = "disable", about = "Disable edge crossing")]
     Disable,
 }
 
@@ -67,6 +87,15 @@ pub enum CliError {
 
 pub async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        Command::Setup => setup::run().await,
+        Command::Install => lifecycle::install("install"),
+        Command::Uninstall => lifecycle::install("uninstall"),
+        Command::Start => lifecycle::service("start"),
+        Command::Stop => lifecycle::service("stop"),
+        Command::Restart => lifecycle::service("restart"),
+        Command::Doctor => lifecycle::doctor().await,
+        Command::Logs => lifecycle::logs(),
+        Command::Update { version } => lifecycle::update(version.as_deref()),
         Command::Daemon => crate::daemon::run().await,
         Command::Status => status::run().await,
         Command::Discover => simple::discover().await,

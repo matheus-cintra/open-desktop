@@ -1,114 +1,121 @@
-# open-desktop
+<div align="center">
+  <img src="docs/icon.svg" width="96" alt="Open Desktop" />
+  <h1>Open Desktop</h1>
+  <p><strong>Seu mouse atravessa a tela. Seu trabalho continua.</strong></p>
+  <p>Compartilhe mouse, teclado, clipboard e arquivos entre dois computadores com Hyprland.</p>
+  <p>
+    <img src="https://img.shields.io/badge/plataforma-Arch%20%2F%20CachyOS-74e1d0?style=flat-square" alt="Arch e CachyOS" />
+    <img src="https://img.shields.io/badge/Hyprland-Lua-b2a1ff?style=flat-square" alt="Hyprland Lua" />
+    <img src="https://img.shields.io/badge/licença-MIT%20%2F%20Apache--2.0-blue?style=flat-square" alt="MIT ou Apache 2.0" />
+  </p>
+  <p><a href="#instalação">Instalar</a> · <a href="#primeira-conexão">Conectar</a> · <a href="#comandos">Comandos</a> · <a href="#compatibilidade">Compatibilidade</a></p>
+  <img src="docs/overview.svg" width="800" alt="Ilustração: desktop e notebook compartilham controles pela rede local" />
+</div>
 
-Universal Control for Hyprland: push the cursor against a screen edge and it crosses to another Linux machine on the same LAN. Keyboard follows, the clipboard syncs, files drag across, and a small bar on the edge shows the push progress and the arrival.
+<table>
+<tr><td width="50%"><h3>↗ Quatro bordas</h3>Empurre o cursor contra qualquer borda. Uma barra mostra o progresso até a passagem.</td><td><h3>⌨ Teclado acompanha</h3>Digite e use atalhos no computador que está recebendo o cursor.</td></tr>
+<tr><td><h3>▣ Copie aqui, cole lá</h3>Textos e imagens, incluindo capturas de tela, sincronizam entre as máquinas.</td><td><h3>⇄ Arraste arquivos</h3>Leve o arquivo até a outra tela e solte no gerenciador de arquivos.</td></tr>
+</table>
 
-Requirements: Hyprland >= 0.56 on both machines, same LAN.
+## Instalação
 
-## Milestones
+**Primeira release pública em preparação.** O comando abaixo estará disponível após a publicação da tag de versão. Por enquanto, use a [instalação pelo código](#pelo-código).
 
-- M1: cursor and keyboard sharing, mDNS discovery, PIN pairing, edge crossing, keyboard capture with the compositor's own binds forwarded to the target, emergency release hotkey, control return, disconnect handling.
-- M2: push resistance (the cursor holds at the edge and crosses only after you push past a threshold) and the on-screen bar (progress on the source, arrival on the target).
-- M3: clipboard sync (text and images) between the two machines, always on, independent of the cursor.
-- M4: file drag across the edge — drag a file to the edge on one machine and it transfers and drops on the other.
+Nos **dois computadores**, abra um terminal na sessão Hyprland iniciada com UWSM:
 
-## Install and run
+```sh
+curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/latest/download/install.sh | sh
+~/.local/bin/opendesk setup
+```
 
-This MVP targets CachyOS and Arch Linux with one output each and an active
-Hyprland Lua session managed by UWSM. Both machines must run the same artifact:
-network protocol 2 rejects older protocol versions. GUI setup and packages are
-outside this MVP.
+Sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. `setup` inicia o serviço e orienta o pareamento. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
+
+Prefere inspecionar o script? Baixe o `install.sh` da release, leia e execute `sh install.sh`. Para uma versão específica: `sh install.sh v0.1.0`.
+
+## Primeira conexão
+
+1. Execute `opendesk setup` nas duas máquinas, conectadas à mesma LAN.
+2. Em uma, escolha **Iniciar pareamento** e selecione o outro computador.
+3. Na outra, escolha **Receber**. Digite o PIN exibido nela no computador que iniciou.
+4. O assistente configura as quatro bordas em cada máquina. Se já estiverem pareadas, escolha **Configurar peer existente**.
+5. Empurre o cursor contra uma borda até a barra completar. O teclado acompanha.
+
+Você entra pela borda oposta, na mesma posição proporcional. Para voltar, use **somente a borda de entrada**; as outras três não devolvem o controle. **Ctrl+Alt+Esc** libera o controle imediatamente.
+
+O app funciona em segundo plano. Nenhum terminal precisa permanecer aberto. Clipboard sincroniza mesmo quando o cursor está local.
+
+## Comandos
+
+| Quero… | Comando |
+|---|---|
+| Configurar ou parear | `opendesk setup` |
+| Ver conexão, endereço e bordas | `opendesk status` |
+| Encontrar computadores | `opendesk discover` |
+| Pausar / retomar passagens | `opendesk pause` / `opendesk resume` |
+| Recuperar o controle local | `opendesk release` |
+| Iniciar / parar / reiniciar | `opendesk start` / `stop` / `restart` |
+| Diagnosticar | `opendesk doctor` |
+| Acompanhar logs | `opendesk logs` — Ctrl+C fecha os logs |
+| Atualizar | `opendesk update` |
+| Instalar uma versão anterior | `opendesk update v0.1.0` |
+| Desinstalar, preservando dados | `opendesk uninstall` |
+
+Pausar impede novas passagens; não desliga a sincronização do clipboard. Use `stop` para desligar o serviço inteiro. `enable` e `disable` continuam disponíveis como aliases de `resume` e `pause`.
+
+<details>
+<summary>Pareamento e bordas manualmente</summary>
+
+```sh
+opendesk pair NOME
+# Leia o PIN usando opendesk status no outro computador.
+opendesk peer set NOME --side all
+opendesk peer set NOME --side left
+opendesk peer remove NOME
+```
+
+Também são aceitos `right`, `top`, `bottom` e a sintaxe anterior `peer set NOME left`. Um peer com `all` não pode disputar bordas com outro peer. Configure a posição em cada computador.
+</details>
+
+## Compatibilidade
+
+| Suporte inicial | Escopo |
+|---|---|
+| Sistema | Arch Linux e CachyOS, x86_64 |
+| Sessão testada | Hyprland **0.56.2**, configuração **Lua**, gerenciada pelo **UWSM** |
+| Telas | Dois computadores, um monitor em cada; resoluções diferentes aceitas |
+| Rede | Mesma LAN confiável; TCP/UDP **47820**, mDNS UDP **5353** |
+| Clipboard | Texto e imagens |
+| Arquivos | Arrasto entre aplicações compatíveis, validado com Thunar |
+
+**O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo atual é 2; versões de protocolo incompatíveis são rejeitadas.
+
+Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, macOS ou Windows. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
+
+## Atualização e remoção
+
+A atualização substitui o binário de forma atômica e reinicia o serviço se ele estava ativo. Falhas na instalação restauram os arquivos substituídos e o estado anterior do serviço. Configuração, identidade e pareamento são preservados.
+
+```sh
+opendesk update
+opendesk uninstall
+```
+
+Backups: `~/.local/share/opendesk/backups`. Dados preservados: `~/.config/opendesk` (ou os diretórios XDG configurados). Nunca copie identidades entre computadores. Depois de reinstalar, `setup` permite selecionar o peer existente.
+
+## Pelo código
+
+Requer Rust **1.98**, compilador C, `pkgconf`, Wayland e libxkbcommon. Com as dependências instaladas:
 
 ```sh
 cargo build --release --locked
-OPENDESK_BIN="$PWD/target/release/opendesk" ./scripts/install-user.sh
-systemctl --user start opendesk.service
-~/.local/bin/opendesk discover
-~/.local/bin/opendesk pair <other-machine-name>
-~/.local/bin/opendesk peer set <other-machine-name> --side all
-~/.local/bin/opendesk status
+./target/release/opendesk install
+~/.local/bin/opendesk setup
 ```
 
-Read the pairing PIN from `opendesk status` on the other machine. Each machine
-creates its own identity; never copy identity or pairing tokens between hosts.
-To install remotely, copy the binary, `scripts/install-user.sh`, and
-`packaging/opendesk.service` into a separate staging directory over SSH, preserving
-that directory structure. Compare `sha256sum` and check `ldd` on both hosts before
-running the installer there with an absolute `OPENDESK_BIN`. Do not replace the
-remote checkout or depend on Syncthing for installation.
+## Desenvolvimento
 
-The installer copies the executable into `~/.local/bin`, enables the user service,
-and adds `conf/opendesk.lua` to `~/.config/hypr/hyprland.lua`. It preserves existing
-modules and backs up replaced files under `~/.local/share/opendesk/backups`.
-Reinstallation preserves configuration, identity and pairing. The Lua module
-removes animation from the progress bar; no manual layer rule is needed.
-Its non-consuming mouse-release hook is also required to finish cross-machine
-file drops when Wayland's original drag holds the pointer grab.
-Symlinked main Lua configs are rejected before mutation.
+[Arquitetura e testes](docs/technical.md) · [Processo de release](docs/releases.md)
 
-UWSM supplies the graphical environment through `graphical-session.target`, as
-[documented by Hyprland](https://wiki.hypr.land/Useful-Utilities/Systemd-start/).
-The service stores no temporary session identifiers. With an active session,
-the installer reloads Hyprland and checks its errors through the user service
-manager, including when invoked over SSH. A failed installation restores replaced
-files. Start the service explicitly after installation; future graphical sessions
-start the enabled service automatically.
+Mouse, quatro bordas, teclado, clipboard de texto/imagens, arrasto e liberação de emergência foram validados fisicamente no par CachyOS/Arch. Cada nova release também exige verificação dos artefatos; testes de CI não substituem a validação nas sessões reais.
 
-## Four edges
-
-`side` accepts `left`, `right`, `top`, `bottom`, or `all`; the positional form
-`opendesk peer set NAME left` remains supported. `all` owns all four outer edges
-on the supported single-output layout. Conflicts with another peer are rejected
-without changing the previous configuration. Status shows `all`; each network
-crossing still identifies one concrete direction.
-
-Push against any edge until the progress bar completes. Arrival uses the opposite
-edge and preserves proportional position. During remote control, only that entry
-edge returns control, including file drag. Other edges cannot start a crossing.
-`Ctrl+Alt+Esc` is the emergency release. Partial exposed edges in staggered
-multi-monitor layouts are not supported by this MVP.
-
-The config is `~/.config/opendesk/config.toml`; `edge_threshold_px`,
-`edge_cancel_px`, and `bar_color` tune resistance and the bar.
-
-## Diagnostics and network
-
-```sh
-systemctl --user status opendesk.service
-journalctl --user -u opendesk.service -f
-~/.local/bin/opendesk status
-~/.local/bin/opendesk discover
-systemd-run --user --wait --pipe --collect hyprctl configerrors
-ldd ~/.local/bin/opendesk
-```
-
-Confirm the peer address is on the LAN. Allow TCP/UDP 47820 and mDNS UDP 5353
-only on the appropriate LAN interface/subnet, preserving existing firewall rules:
-
-```sh
-sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 47820 proto tcp
-sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 47820 proto udp
-sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 5353 proto udp
-```
-
-After pairing, restarting both services must reconnect without another PIN.
-Automated checks: `cargo fmt --check`, `cargo clippy --workspace --all-targets --
--D warnings`, `cargo test --workspace --locked`, `scripts/check-file-length.sh`,
-`bash test/install-user-sandbox.sh`, and the nested tests `test/e2e_m1.py` and
-`test/e2e_all_edges.py` (build the daemon and examples first). Physical mouse,
-keyboard shortcuts, clipboard and file drag must also be checked in both directions.
-
-## Stop, rollback and uninstall
-
-Run `opendesk release` to restore local control, or use `Ctrl+Alt+Esc`.
-`systemctl --user stop opendesk.service` stops the daemon;
-`systemctl --user disable --now opendesk.service` also disables automatic startup.
-
-`./scripts/install-user.sh uninstall` removes managed integration and restores
-preexisting launcher/unit/module backups. It preserves `config.toml`, `peers.toml`,
-and `identity.toml`. `./scripts/install-user.sh rollback-hyprland` restores the
-recorded main-config backup; then reload Hyprland with the diagnostic service-manager
-command above, replacing `configerrors` with `reload`. Backups remain available
-for manual recovery. Remove only the firewall rules added for this app if no
-longer needed. No checkout, configuration data or pairing store is deleted.
-
-Licensed under MIT or Apache-2.0, at your option.
+Distribuído sob **MIT ou Apache-2.0**, à sua escolha.

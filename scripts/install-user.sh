@@ -18,6 +18,8 @@ fail() { printf 'opendesk install: %s\n' "$*" >&2; exit 1; }
 backup_dir=""
 declare -a replaced=()
 service_was_enabled=false
+service_was_active=false
+next_binary=""
 pending_hyprland_backup=""
 
 has_graphical_session() {
@@ -44,20 +46,39 @@ restore_replaced() {
     rm -rf "$path"
     [[ "$item" == "!"* ]] || cp -a "$backup_dir${path}" "$path"
   done
+  [[ -z "$next_binary" ]] || rm -f "$next_binary"
   systemctl --user daemon-reload || true
   if "$service_was_enabled"; then
     systemctl --user enable opendesk.service || true
   else
     systemctl --user disable opendesk.service || true
   fi
+  if "$service_was_active"; then
+    systemctl --user restart opendesk.service || true
+  else
+    systemctl --user stop opendesk.service || true
+  fi
   if has_graphical_session; then
     systemd-run --user --wait --pipe --collect hyprctl reload || true
   fi
 }
 
+# Serialize installation and uninstallation for this user.
+mkdir -p "$backup_home"
+exec 9>"$backup_home/lifecycle.lock"
+flock -n 9 || fail "another installation is running"
+
 case "${1:-install}" in
   install)
     [[ ! -L "$hypr_config" ]] || fail "hyprland.lua must be a regular file; symlink targets cannot be restored safely"
+    for path in "$unit" "$module"; do
+      [[ ! -L "$path" ]] || fail "managed destination must not be a symlink: $path"
+    done
+    [[ -f "$hypr_config" ]] || fail "requires an existing Hyprland Lua configuration: $hypr_config"
+    for tool in systemctl systemd-run hyprctl; do
+      command -v "$tool" >/dev/null || fail "missing dependency: $tool"
+    done
+    has_graphical_session || fail "start your Hyprland session through UWSM before installing"
     source_bin="${OPENDESK_BIN:-$(command -v opendesk || true)}"
     [[ -n "$source_bin" && -x "$source_bin" ]] || fail "set OPENDESK_BIN to the built opendesk executable"
     mkdir -p "$bin_home" "$unit_home" "$hypr_home/conf" "$backup_home"
@@ -66,11 +87,17 @@ case "${1:-install}" in
     if systemctl --user is-enabled --quiet opendesk.service; then
       service_was_enabled=true
     fi
+    if systemctl --user is-active --quiet opendesk.service; then
+      service_was_active=true
+    fi
     backup_path "$bin_home/opendesk"
     backup_path "$unit"
     backup_path "$module"
     if [[ "$(readlink -f "$source_bin")" != "$bin_home/opendesk" ]]; then
-      install -m 0755 "$source_bin" "$bin_home/opendesk"
+      next_binary="$(mktemp "$bin_home/.opendesk.XXXXXX")"
+      install -m 0755 "$source_bin" "$next_binary"
+      mv -f "$next_binary" "$bin_home/opendesk"
+      next_binary=""
     fi
     install -m 0644 "$root/packaging/opendesk.service" "$unit"
 
@@ -108,6 +135,11 @@ LUA
       errors="$(systemd-run --user --wait --pipe --collect hyprctl configerrors)"
       [[ -z "$errors" ]] || fail "Hyprland rejected its configuration: $errors"
     fi
+    if "$service_was_active"; then
+      systemctl --user restart opendesk.service
+      sleep 1
+      systemctl --user is-active --quiet opendesk.service || fail "updated service failed to start"
+    fi
     printf '%s\n' "${replaced[@]}" > "$backup_dir/replaced-paths"
     if [[ -n "$pending_hyprland_backup" && ! -f "$backup_home/latest-hyprland-backup" ]]; then
       printf '%s\n' "$pending_hyprland_backup" > "$backup_home/latest-hyprland-backup"
@@ -116,7 +148,7 @@ LUA
       printf '%s\n' "$backup_dir" > "$backup_home/latest-install-backup"
     fi
     trap - EXIT
-    printf 'Installed. Start with: systemctl --user start opendesk.service\n'
+    printf 'Installed. Next: ~/.local/bin/opendesk setup\n'
     ;;
   uninstall)
     systemctl --user disable --now opendesk.service 2>/dev/null || true
@@ -147,6 +179,9 @@ LUA
     fi
     rm -f "$backup_home/latest-install-backup" "$backup_home/latest-hyprland-backup"
     systemctl --user daemon-reload
+    if has_graphical_session; then
+      systemd-run --user --wait --pipe --collect hyprctl reload
+    fi
     printf 'Removed launcher, service and managed Hyprland module. Identity, pairing and config files were preserved.\n'
     ;;
   rollback-hyprland)
