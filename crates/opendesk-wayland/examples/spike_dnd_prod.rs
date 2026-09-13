@@ -139,6 +139,7 @@ fn run_target_path(spike: &mut Spike, output: &OutputGeometry) -> DndResult<()> 
     sleep_millis(80);
 
     spike.send(WaylandCommand::StartDropDrag {
+        id: 1,
         uris: vec![file.clone()],
     })?;
     sleep_millis(400);

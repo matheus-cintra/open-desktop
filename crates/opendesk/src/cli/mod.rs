@@ -45,8 +45,14 @@ pub enum Command {
 
 #[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
 pub enum PeerAction {
-    #[command(about = "Place a paired peer on a side: left, right, top or bottom")]
-    Set { name: String, side: String },
+    #[command(about = "Place a paired peer on a side: left, right, top, bottom or all")]
+    Set {
+        name: String,
+        #[arg(value_name = "SIDE")]
+        side: Option<String>,
+        #[arg(long = "side", value_name = "SIDE")]
+        side_option: Option<String>,
+    },
     #[command(about = "Forget a paired peer")]
     Remove { name: String },
 }

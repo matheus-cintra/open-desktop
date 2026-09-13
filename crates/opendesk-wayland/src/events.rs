@@ -91,6 +91,7 @@ pub enum WaylandEvent {
         content: ClipboardContent,
     },
     DragEnteredEdge {
+        generation: u64,
         side: Side,
         output: String,
         position: f64,
@@ -101,9 +102,22 @@ pub enum WaylandEvent {
         position: f64,
     },
     DragLeftEdge {
+        generation: u64,
         side: Side,
     },
-    DragReleasedEdge,
+    DragReleasedEdge {
+        generation: u64,
+    },
+    DragGeneration {
+        generation: u64,
+    },
+    DragFocusReady {
+        id: u64,
+    },
+    DropDragEnded {
+        id: u64,
+        accepted: bool,
+    },
     Fatal {
         message: String,
     },
@@ -122,6 +136,12 @@ pub enum WaylandCommand {
         hint: Option<f64>,
     },
     StartGrab,
+    PrepareDragFocus {
+        id: u64,
+    },
+    CancelDragFocus {
+        id: u64,
+    },
     StopGrab {
         hint: Option<f64>,
     },
@@ -174,7 +194,11 @@ pub enum WaylandCommand {
     },
     AbortLocalDrag,
     StartDropDrag {
+        id: u64,
         uris: Vec<PathBuf>,
+    },
+    ReleaseDropDrag {
+        id: u64,
     },
     CancelDropDrag,
     Shutdown,

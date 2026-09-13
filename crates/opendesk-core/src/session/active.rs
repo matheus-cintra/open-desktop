@@ -4,6 +4,20 @@ use opendesk_proto::control::{DenyReason, PeerId, ReleaseReason, Side};
 
 use super::{Session, SessionAction, SessionEvent, SessionState, Transition};
 
+impl Session {
+    pub fn can_return_at(&self, side: Side, now: Instant) -> bool {
+        match self.state {
+            SessionState::Controlled {
+                return_side, since, ..
+            } => {
+                side == return_side
+                    && now.saturating_duration_since(since) >= self.config.arrival_grace
+            }
+            _ => false,
+        }
+    }
+}
+
 fn deny(peer: PeerId, reason: DenyReason) -> Vec<SessionAction> {
     vec![SessionAction::SendControlDenied { peer, reason }]
 }

@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::color::Rgba;
 use crate::hotkey::Hotkey;
 
+mod peer_side;
+pub use peer_side::PeerSide;
+
 pub const CONFIG_ENV: &str = "OPENDESK_CONFIG";
 const FALLBACK_NAME: &str = "opendesk";
 
@@ -28,6 +31,8 @@ pub enum ConfigError {
     },
     #[error("failed to serialize configuration: {0}")]
     Serialize(#[from] toml::ser::Error),
+    #[error("invalid peer placement: {0}")]
+    Placement(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -92,8 +97,8 @@ fn local_hostname() -> String {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerConfig {
     pub name: String,
-    #[serde(with = "side_as_word")]
-    pub side: Side,
+    #[serde(with = "peer_side")]
+    pub side: PeerSide,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addr: Option<SocketAddr>,
 }
@@ -129,10 +134,15 @@ impl Config {
                 });
             }
         };
-        toml::from_str(&content).map_err(|error| ConfigError::Parse {
+        let config: Config = toml::from_str(&content).map_err(|error| ConfigError::Parse {
             path: path.to_owned(),
             message: error.to_string(),
-        })
+        })?;
+        config.validate().map_err(|message| ConfigError::Parse {
+            path: path.to_owned(),
+            message,
+        })?;
+        Ok(config)
     }
 
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
@@ -148,47 +158,65 @@ impl Config {
     }
 
     pub fn peer_for_side(&self, side: Side) -> Option<&PeerConfig> {
-        self.peers.iter().find(|peer| peer.side == side)
+        self.peers.iter().find(|peer| peer.side.covers(side))
     }
 
-    pub fn side_for_peer(&self, name: &str) -> Option<Side> {
+    pub fn side_for_peer(&self, name: &str) -> Option<PeerSide> {
         self.peers
             .iter()
             .find(|peer| peer.name == name)
             .map(|peer| peer.side)
     }
 
-    pub fn set_peer_side(&mut self, name: &str, side: Side) {
-        self.peers
-            .retain(|peer| peer.side != side || peer.name == name);
-        match self.peers.iter_mut().find(|peer| peer.name == name) {
+    pub fn set_peer_side(&mut self, name: &str, side: PeerSide) -> Result<(), ConfigError> {
+        let mut next = self.clone();
+        if side == PeerSide::All && next.peers.iter().any(|peer| peer.name != name) {
+            return Err(ConfigError::Placement(
+                "all cannot overlap another peer placement".to_owned(),
+            ));
+        }
+        if let PeerSide::Side(edge) = side {
+            if next
+                .peers
+                .iter()
+                .any(|peer| peer.name != name && peer.side == PeerSide::All)
+            {
+                return Err(ConfigError::Placement(
+                    "a peer configured as all owns every edge".to_owned(),
+                ));
+            }
+            next.peers
+                .retain(|peer| peer.name == name || !peer.side.covers(edge));
+        }
+        match next.peers.iter_mut().find(|peer| peer.name == name) {
             Some(peer) => peer.side = side,
-            None => self.peers.push(PeerConfig {
+            None => next.peers.push(PeerConfig {
                 name: name.to_owned(),
                 side,
                 addr: None,
             }),
         }
+        next.validate().map_err(ConfigError::Placement)?;
+        *self = next;
+        Ok(())
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(all) = self.peers.iter().find(|peer| peer.side == PeerSide::All)
+            && self.peers.len() > 1
+        {
+            return Err(format!(
+                "{} configured as all overlaps another peer",
+                all.name
+            ));
+        }
+        Ok(())
     }
 
     pub fn remove_peer(&mut self, name: &str) -> bool {
         let before = self.peers.len();
         self.peers.retain(|peer| peer.name != name);
         self.peers.len() != before
-    }
-}
-
-pub mod side_as_word {
-    use opendesk_proto::control::Side;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(side: &Side, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(side.as_str())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Side, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        text.parse().map_err(serde::de::Error::custom)
     }
 }
 

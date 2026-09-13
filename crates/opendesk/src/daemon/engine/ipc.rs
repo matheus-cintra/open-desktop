@@ -1,5 +1,5 @@
+use opendesk_core::config::PeerSide;
 use opendesk_core::session::{SessionEvent, SessionState};
-use opendesk_proto::control::Side;
 use tokio::sync::oneshot;
 
 use super::Engine;
@@ -73,7 +73,7 @@ impl Engine {
     }
 
     fn set_peer_side(&mut self, name: &str, side: &str) -> IpcResponse {
-        let Ok(side) = side.parse::<Side>() else {
+        let Ok(side) = side.parse::<PeerSide>() else {
             let message = rust_i18n::t!("peer.invalid_side", side = side).into_owned();
             return IpcResponse::Error { message };
         };
@@ -81,7 +81,11 @@ impl Engine {
             let message = rust_i18n::t!("peer.not_paired", name = name).into_owned();
             return IpcResponse::Error { message };
         }
-        self.config.set_peer_side(name, side);
+        if let Err(error) = self.config.set_peer_side(name, side) {
+            return IpcResponse::Error {
+                message: error.to_string(),
+            };
+        }
         self.save_config();
         self.reconfigure_strips();
         IpcResponse::Ok

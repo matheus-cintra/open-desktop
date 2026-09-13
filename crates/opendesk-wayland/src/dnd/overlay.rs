@@ -25,6 +25,7 @@ pub enum DropPhase {
 }
 
 pub struct DropDrag {
+    pub id: u64,
     pub uris: Arc<Vec<u8>>,
     pub overlay: Option<LayerSurface>,
     pub overlay_buffer: Option<Buffer>,
@@ -33,6 +34,9 @@ pub struct DropDrag {
     pub phase: DropPhase,
     pub generation: u64,
     pub timeout: Option<RegistrationToken>,
+    pub synthetic_button_down: bool,
+    pub release_requested: bool,
+    pub release_timer: Option<RegistrationToken>,
 }
 
 impl DropDrag {
@@ -51,6 +55,7 @@ impl State {
     pub fn create_drop_overlay(
         &mut self,
         queue_handle: &QueueHandle<State>,
+        id: u64,
         uris: Arc<Vec<u8>>,
         generation: u64,
     ) -> Result<DropDrag, WaylandError> {
@@ -77,6 +82,7 @@ impl State {
         overlay.commit();
 
         Ok(DropDrag {
+            id,
             uris,
             overlay: Some(overlay),
             overlay_buffer: None,
@@ -85,6 +91,9 @@ impl State {
             phase: DropPhase::AwaitingEnter,
             generation,
             timeout: None,
+            synthetic_button_down: false,
+            release_requested: false,
+            release_timer: None,
         })
     }
 

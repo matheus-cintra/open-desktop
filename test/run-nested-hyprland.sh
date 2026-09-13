@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-config="$root/test/hyprland-nested.conf"
+config="${OPENDESK_NESTED_CONFIG:-$root/test/hyprland-nested.conf}"
 label="${1:-default}"
 state_dir="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/opendesk-nested-$label"
 log_file="$state_dir/hyprland.log"

@@ -20,6 +20,7 @@ impl Engine {
     pub(super) fn on_tick(&mut self, now: Instant) {
         self.dispatch(SessionEvent::Tick);
         self.tick_drag(now);
+        self.expire_return_drag(now);
         self.expire_pairing(now);
         self.reload_config_if_dirty(now);
         self.dial_missing_peers(now);

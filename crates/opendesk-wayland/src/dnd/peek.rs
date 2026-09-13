@@ -3,6 +3,8 @@ use std::fs::File;
 use std::os::fd::OwnedFd;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use opendesk_proto::control::Side;
 use tokio::sync::mpsc::UnboundedSender;
@@ -82,16 +84,22 @@ fn percent_encode_into(output: &mut String, bytes: &[u8]) {
 pub fn spawn_peek_reader(
     fd: OwnedFd,
     events: UnboundedSender<WaylandEvent>,
+    current_generation: Arc<AtomicU64>,
+    generation: u64,
     side: Side,
     output: String,
     position: f64,
-) {
+) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let uris = read_capped(File::from(fd), PEEK_READ_CAP)
             .and_then(|bytes| String::from_utf8(bytes).ok())
             .map(|text| parse_uri_list(&text))
             .unwrap_or_default();
+        if current_generation.load(Ordering::Acquire) != generation {
+            return;
+        }
         let event = WaylandEvent::DragEnteredEdge {
+            generation,
             side,
             output,
             position,
@@ -100,13 +108,20 @@ pub fn spawn_peek_reader(
         if events.send(event).is_err() {
             tracing::debug!("drag-enter event receiver is gone");
         }
-    });
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_uri_list, render_uri_list};
+    use super::{parse_uri_list, render_uri_list, spawn_peek_reader};
+    use opendesk_proto::control::Side;
+    use std::io::Write;
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
     use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tokio::sync::mpsc::unbounded_channel;
 
     #[test]
     fn keeps_only_local_file_uris() {
@@ -138,5 +153,26 @@ mod tests {
         let rendered = render_uri_list(&paths);
         let text = String::from_utf8(rendered).unwrap();
         assert_eq!(parse_uri_list(&text), paths.to_vec());
+    }
+
+    #[test]
+    fn late_peek_does_not_emit_after_drag_generation_changes() {
+        let (read, mut write) = UnixStream::pair().unwrap();
+        let generation = Arc::new(AtomicU64::new(7));
+        let (sender, mut receiver) = unbounded_channel();
+        let reader = spawn_peek_reader(
+            OwnedFd::from(read),
+            sender,
+            generation.clone(),
+            7,
+            Side::Left,
+            "output".to_owned(),
+            25.0,
+        );
+        write.write_all(b"file:///tmp/late.txt\r\n").unwrap();
+        generation.store(8, Ordering::Release);
+        drop(write);
+        reader.join().unwrap();
+        assert!(receiver.try_recv().is_err());
     }
 }

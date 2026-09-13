@@ -2,6 +2,7 @@ use smithay_client_toolkit::dispatch2::Dispatch2;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shell::wlr_layer::KeyboardInteractivity;
 use wayland_client::{Connection, QueueHandle};
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::zwp_keyboard_shortcuts_inhibitor_v1::{self, ZwpKeyboardShortcutsInhibitorV1};
 use wayland_protocols::wp::pointer_constraints::zv1::client::zwp_locked_pointer_v1::{self, ZwpLockedPointerV1};
 use wayland_protocols::wp::pointer_constraints::zv1::client::zwp_pointer_constraints_v1::Lifetime;
@@ -17,6 +18,7 @@ pub struct Grab {
     relative_pointer: Option<ZwpRelativePointerV1>,
     inhibitor: Option<ZwpKeyboardShortcutsInhibitorV1>,
     exclusive_strip: Option<usize>,
+    prepared_drag: Option<(u64, usize, bool)>,
     pub active: bool,
 }
 
@@ -130,6 +132,58 @@ impl State {
             .pointer
             .focused_strip
             .ok_or(WaylandError::NoFocusedStrip)?;
+        self.capture_keyboard(queue_handle, strip_index)?;
+        self.grab.prepared_drag = None;
+        self.hide_cursor();
+        self.grab.active = true;
+        tracing::info!(strip = strip_index, "grab started");
+        Ok(())
+    }
+
+    pub fn prepare_drag_focus(
+        &mut self,
+        queue_handle: &QueueHandle<State>,
+        id: u64,
+    ) -> Result<(), WaylandError> {
+        let strip_index = self.dnd.entered_strip.ok_or(WaylandError::NoFocusedStrip)?;
+        self.capture_keyboard(queue_handle, strip_index)?;
+        self.grab.prepared_drag = Some((id, strip_index, false));
+        tracing::info!(
+            strip = strip_index,
+            id,
+            "drag focus requested before source abort"
+        );
+        Ok(())
+    }
+
+    pub fn drag_focus_entered(&mut self, surface: &WlSurface) {
+        let Some((id, index, false)) = self.grab.prepared_drag else {
+            return;
+        };
+        if self.strips.index_of_surface(surface) != Some(index) {
+            return;
+        }
+        self.grab.prepared_drag = Some((id, index, true));
+        self.emit(WaylandEvent::DragFocusReady { id });
+    }
+
+    pub fn cancel_drag_focus(&mut self, id: u64) {
+        if self
+            .grab
+            .prepared_drag
+            .is_some_and(|(current, _, _)| current == id)
+        {
+            self.grab.prepared_drag = None;
+            self.release_keyboard();
+            tracing::debug!(id, "drag focus preparation cancelled");
+        }
+    }
+
+    fn capture_keyboard(
+        &mut self,
+        queue_handle: &QueueHandle<State>,
+        strip_index: usize,
+    ) -> Result<(), WaylandError> {
         let seat = self.devices.seat.clone().ok_or(WaylandError::NoKeyboard)?;
         let strip = self
             .strips
@@ -148,14 +202,13 @@ impl State {
                 InhibitorData,
             ));
         }
-        self.hide_cursor();
-        self.grab.active = true;
-        tracing::info!(strip = strip_index, "grab started");
+        tracing::info!(strip = strip_index, "keyboard capture started");
         Ok(())
     }
 
     pub fn stop_grab(&mut self, hint: Option<f64>) {
         self.grab.active = false;
+        self.grab.prepared_drag = None;
         self.release_keyboard();
         self.unlock_pointer(hint);
         self.show_cursor();
@@ -164,6 +217,7 @@ impl State {
 
     pub fn release_grab_objects(&mut self) {
         self.grab.active = false;
+        self.grab.prepared_drag = None;
         self.release_keyboard();
         self.destroy_lock();
     }

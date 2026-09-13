@@ -1,8 +1,11 @@
 mod device;
 mod overlay;
 mod peek;
+mod release;
 mod source;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use smithay_client_toolkit::data_device_manager::DataDeviceManagerState;
@@ -18,18 +21,24 @@ use crate::state::State;
 
 const BTN_LEFT: u32 = 0x110;
 const KEY_ESCAPE: u32 = 1;
-const DROP_DRAG_TIMEOUT: Duration = Duration::from_millis(1000);
+const DROP_DRAG_FOCUS_TIMEOUT: Duration = Duration::from_secs(15);
+const DROP_DRAG_ACTIVE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct Dnd {
     manager: Option<DataDeviceManagerState>,
     device: Option<DataDevice>,
-    entered_strip: Option<usize>,
+    pub(crate) entered_strip: Option<usize>,
     drop: Option<DropDrag>,
     generation: u64,
+    drag_generation: Arc<AtomicU64>,
 }
 
 impl Dnd {
-    pub fn new(globals: &GlobalList, queue_handle: &QueueHandle<State>) -> Dnd {
+    pub fn new(
+        globals: &GlobalList,
+        queue_handle: &QueueHandle<State>,
+        drag_generation: Arc<AtomicU64>,
+    ) -> Dnd {
         let manager = match DataDeviceManagerState::bind(globals, queue_handle) {
             Ok(manager) => {
                 tracing::info!("bound wl_data_device_manager");
@@ -46,6 +55,7 @@ impl Dnd {
             entered_strip: None,
             drop: None,
             generation: 0,
+            drag_generation,
         }
     }
 }
@@ -63,12 +73,14 @@ impl State {
     }
 
     pub fn dnd_seat_gone(&mut self) {
+        self.invalidate_drag_generation();
         self.cancel_drop_drag();
         self.dnd.device = None;
         self.dnd.entered_strip = None;
     }
 
     pub fn dnd_shutdown(&mut self) {
+        self.invalidate_drag_generation();
         self.cancel_drop_drag();
         self.dnd.device = None;
         self.dnd.entered_strip = None;
@@ -93,6 +105,12 @@ impl State {
         keyboard.key(time, KEY_ESCAPE, false);
         tracing::info!("injected Escape to abort the local drag");
         Ok(())
+    }
+
+    pub(crate) fn invalidate_drag_generation(&mut self) -> u64 {
+        let generation = self.dnd.drag_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        self.emit(crate::events::WaylandEvent::DragGeneration { generation });
+        generation
     }
 }
 

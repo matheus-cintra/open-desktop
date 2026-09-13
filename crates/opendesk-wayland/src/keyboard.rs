@@ -31,6 +31,7 @@ impl Dispatch2<WlKeyboard, State> for KeyboardData {
             wl_keyboard::Event::Enter { surface, .. } => {
                 let focused = state.strips.index_of_surface(&surface).is_some();
                 tracing::debug!(focused, "keyboard focus entered");
+                state.drag_focus_entered(&surface);
             }
             wl_keyboard::Event::Leave { .. } => {
                 tracing::debug!("keyboard focus left");

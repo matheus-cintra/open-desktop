@@ -34,18 +34,19 @@ impl State {
     fn peek_and_emit_enter(
         &mut self,
         connection: &Connection,
+        generation: u64,
         side: Side,
         output: String,
         position: f64,
     ) {
         let Some(offer) = self.current_drag_offer() else {
-            self.emit_enter(side, output, position, Vec::new());
+            self.emit_enter(generation, side, output, position, Vec::new());
             return;
         };
         let mime = offer
             .with_mime_types(|mimes| mimes.iter().find(|mime| *mime == URI_LIST_MIME).cloned());
         let Some(mime) = mime else {
-            self.emit_enter(side, output, position, Vec::new());
+            self.emit_enter(generation, side, output, position, Vec::new());
             return;
         };
         offer.accept_mime_type(offer.serial, Some(mime.clone()));
@@ -55,9 +56,11 @@ impl State {
                 if let Err(error) = connection.flush() {
                     tracing::debug!(%error, "flushing the drag receive request failed");
                 }
-                spawn_peek_reader(
+                let _ = spawn_peek_reader(
                     OwnedFd::from(pipe),
                     self.events.clone(),
+                    self.dnd.drag_generation.clone(),
+                    generation,
                     side,
                     output,
                     position,
@@ -65,19 +68,21 @@ impl State {
             }
             Err(error) => {
                 tracing::debug!(%error, "could not receive the uri list for the peek");
-                self.emit_enter(side, output, position, Vec::new());
+                self.emit_enter(generation, side, output, position, Vec::new());
             }
         }
     }
 
     fn emit_enter(
         &mut self,
+        generation: u64,
         side: Side,
         output: String,
         position: f64,
         uris: Vec<std::path::PathBuf>,
     ) {
         self.emit(WaylandEvent::DragEnteredEdge {
+            generation,
             side,
             output,
             position,
@@ -96,22 +101,25 @@ impl DataDeviceHandler for State {
         y: f64,
         surface: &WlSurface,
     ) {
+        let generation = self.invalidate_drag_generation();
         let Some(index) = self.strips.index_of_surface(surface) else {
+            self.dnd.entered_strip = None;
             return;
         };
         self.dnd.entered_strip = Some(index);
         let Some((side, output, position)) = self.strip_edge_location(index, x, y) else {
             return;
         };
-        self.peek_and_emit_enter(connection, side, output, position);
+        self.peek_and_emit_enter(connection, generation, side, output, position);
     }
 
     fn leave(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {
+        let generation = self.invalidate_drag_generation();
         let Some(index) = self.dnd.entered_strip.take() else {
             return;
         };
         if let Some(side) = self.strips.get(index).map(|strip| strip.spec.side) {
-            self.emit(WaylandEvent::DragLeftEdge { side });
+            self.emit(WaylandEvent::DragLeftEdge { generation, side });
         }
     }
 
@@ -127,6 +135,7 @@ impl DataDeviceHandler for State {
     fn selection(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {}
 
     fn drop_performed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataDevice) {
+        let generation = self.invalidate_drag_generation();
         if self.dnd.entered_strip.take().is_none() {
             return;
         }
@@ -134,7 +143,7 @@ impl DataDeviceHandler for State {
             offer.finish();
             offer.destroy();
         }
-        self.emit(WaylandEvent::DragReleasedEdge);
+        self.emit(WaylandEvent::DragReleasedEdge { generation });
     }
 }
 

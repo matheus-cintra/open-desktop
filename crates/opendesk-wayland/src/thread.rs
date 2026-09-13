@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 
@@ -17,6 +19,7 @@ const THREAD_NAME: &str = "opendesk-wayland";
 
 pub struct WaylandHandle {
     pub commands: Sender<WaylandCommand>,
+    pub drag_generation: Arc<AtomicU64>,
     join: JoinHandle<()>,
 }
 
@@ -31,22 +34,29 @@ impl WaylandHandle {
 
 pub fn spawn(events: UnboundedSender<WaylandEvent>) -> Result<WaylandHandle, WaylandError> {
     let (commands, channel) = calloop::channel::channel();
+    let drag_generation = Arc::new(AtomicU64::new(0));
+    let state_generation = drag_generation.clone();
     let (startup_sender, startup_receiver) = mpsc::channel();
     let join = std::thread::Builder::new()
         .name(THREAD_NAME.to_owned())
-        .spawn(move || run_thread(events, channel, startup_sender))?;
+        .spawn(move || run_thread(events, channel, startup_sender, state_generation))?;
     startup_receiver
         .recv()
         .map_err(|_| WaylandError::StartupChannelClosed)??;
-    Ok(WaylandHandle { commands, join })
+    Ok(WaylandHandle {
+        commands,
+        drag_generation,
+        join,
+    })
 }
 
 fn run_thread(
     events: UnboundedSender<WaylandEvent>,
     channel: Channel<WaylandCommand>,
     startup_sender: mpsc::Sender<Result<(), WaylandError>>,
+    drag_generation: Arc<AtomicU64>,
 ) {
-    let (mut event_loop, mut state) = match connect(events.clone(), channel) {
+    let (mut event_loop, mut state) = match connect(events.clone(), channel, drag_generation) {
         Ok(ready) => ready,
         Err(error) => {
             tracing::error!(%error, "wayland thread failed to start");
@@ -72,6 +82,7 @@ fn run_thread(
 fn connect(
     events: UnboundedSender<WaylandEvent>,
     channel: Channel<WaylandCommand>,
+    drag_generation: Arc<AtomicU64>,
 ) -> Result<(EventLoop<'static, State>, State), WaylandError> {
     let connection = Connection::connect_to_env()?;
     let (globals, mut event_queue) = registry_queue_init::<State>(&connection)?;
@@ -83,6 +94,7 @@ fn connect(
         events,
         event_loop.get_signal(),
         event_loop.handle(),
+        drag_generation,
     )?;
     event_queue.roundtrip(&mut state)?;
     event_queue.roundtrip(&mut state)?;

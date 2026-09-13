@@ -24,6 +24,11 @@ impl State {
                 Ok(())
             }
             WaylandCommand::StartGrab => self.start_grab(queue_handle),
+            WaylandCommand::PrepareDragFocus { id } => self.prepare_drag_focus(queue_handle, id),
+            WaylandCommand::CancelDragFocus { id } => {
+                self.cancel_drag_focus(id);
+                Ok(())
+            }
             WaylandCommand::StopGrab { hint } => {
                 self.stop_grab(hint);
                 Ok(())
@@ -74,7 +79,13 @@ impl State {
                 .virtual_keyboard()
                 .map(|keyboard| keyboard.modifiers(depressed, latched, locked, group)),
             WaylandCommand::AbortLocalDrag => self.abort_local_drag(),
-            WaylandCommand::StartDropDrag { uris } => self.start_drop_drag(queue_handle, uris),
+            WaylandCommand::StartDropDrag { id, uris } => {
+                self.start_drop_drag(queue_handle, id, uris)
+            }
+            WaylandCommand::ReleaseDropDrag { id } => {
+                self.request_drop_release(id);
+                Ok(())
+            }
             WaylandCommand::CancelDropDrag => {
                 self.cancel_drop_drag();
                 Ok(())

@@ -216,6 +216,9 @@ pub enum ControlMessage {
     Pong {
         nonce: u32,
     },
+    ReturnDrag {
+        drag: DragInfo,
+    },
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.cargo/bin/opendesk daemon
+ExecStart=%h/.local/bin/opendesk daemon
 Restart=on-failure
 RestartSec=2
 

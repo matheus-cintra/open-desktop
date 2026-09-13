@@ -17,24 +17,32 @@ pub struct EdgeMap {
 impl EdgeMap {
     pub fn rebuild(&mut self, outputs: &[OutputGeometry], config: &Config) -> Vec<StripSpec> {
         self.segments.clear();
-        let mut strips = Vec::new();
         for side in SIDES {
-            if config.peer_for_side(side).is_none() {
-                continue;
-            }
             let segments = exterior_edges(outputs, side);
-            strips.extend(
-                segments
-                    .iter()
-                    .filter(|segment| segment.covers_whole_output_edge)
-                    .map(|segment| StripSpec {
-                        side,
-                        output: segment.output.clone(),
-                    }),
-            );
             self.segments.insert(side, segments);
         }
-        strips
+        self.strips(config, None)
+    }
+
+    pub fn strips(&self, config: &Config, return_side: Option<Side>) -> Vec<StripSpec> {
+        SIDES
+            .into_iter()
+            .filter(|side| match return_side {
+                Some(return_side) => *side == return_side,
+                None => config.peer_for_side(*side).is_some(),
+            })
+            .flat_map(|side| {
+                self.segments
+                    .get(&side)
+                    .into_iter()
+                    .flatten()
+                    .filter(|segment| segment.covers_whole_output_edge)
+                    .map(move |segment| StripSpec {
+                        side,
+                        output: segment.output.clone(),
+                    })
+            })
+            .collect()
     }
 
     pub fn fraction(&self, side: Side, position: f64) -> Option<f32> {

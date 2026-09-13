@@ -170,6 +170,13 @@ impl Session {
         matches!(self.state, SessionState::Controlled { .. })
     }
 
+    pub fn return_side(&self) -> Option<Side> {
+        match self.state {
+            SessionState::Controlled { return_side, .. } => Some(return_side),
+            _ => None,
+        }
+    }
+
     pub fn handle(&mut self, event: SessionEvent, now: Instant) -> Vec<SessionAction> {
         if let SessionEvent::EdgeLeft { side } = &event
             && self

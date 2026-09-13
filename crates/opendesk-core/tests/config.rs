@@ -3,7 +3,7 @@ mod common;
 
 use std::net::SocketAddr;
 
-use opendesk_core::config::{Config, ConfigError, PeerConfig};
+use opendesk_core::config::{Config, ConfigError, PeerConfig, PeerSide};
 use opendesk_proto::control::Side;
 
 use common::TempDir;
@@ -73,12 +73,12 @@ side = "top"
         vec![
             PeerConfig {
                 name: "notebook".to_owned(),
-                side: Side::Left,
+                side: PeerSide::Side(Side::Left),
                 addr: Some("192.168.15.20:47820".parse::<SocketAddr>().unwrap()),
             },
             PeerConfig {
                 name: "tablet".to_owned(),
-                side: Side::Top,
+                side: PeerSide::Side(Side::Top),
                 addr: None,
             },
         ]
@@ -115,7 +115,7 @@ fn save_and_load_round_trip() {
     config.general.bar_color = "#123456".parse().unwrap();
     config.peers.push(PeerConfig {
         name: "notebook".to_owned(),
-        side: Side::Right,
+        side: PeerSide::Side(Side::Right),
         addr: Some("10.0.0.2:47820".parse().unwrap()),
     });
     config.save(&path).unwrap();
@@ -132,35 +132,83 @@ fn save_and_load_round_trip() {
 #[test]
 fn peer_lookups_by_side_and_name() {
     let mut config = Config::default();
-    config.set_peer_side("notebook", Side::Left);
+    config
+        .set_peer_side("notebook", PeerSide::Side(Side::Left))
+        .unwrap();
     assert_eq!(
         config
             .peer_for_side(Side::Left)
             .map(|peer| peer.name.as_str()),
         Some("notebook")
     );
-    assert_eq!(config.side_for_peer("notebook"), Some(Side::Left));
+    assert_eq!(
+        config.side_for_peer("notebook"),
+        Some(PeerSide::Side(Side::Left))
+    );
     assert_eq!(config.side_for_peer("tablet"), None);
     assert!(config.peer_for_side(Side::Right).is_none());
 }
 
 #[test]
-fn set_peer_side_moves_a_side_between_peers() {
+fn set_peer_side_moves_a_cardinal_edge_between_peers() {
     let mut config = Config::default();
-    config.set_peer_side("notebook", Side::Left);
-    config.set_peer_side("tablet", Side::Top);
-    config.set_peer_side("tablet", Side::Left);
-    assert_eq!(config.side_for_peer("tablet"), Some(Side::Left));
+    config
+        .set_peer_side("notebook", PeerSide::Side(Side::Left))
+        .unwrap();
+    config
+        .set_peer_side("tablet", PeerSide::Side(Side::Top))
+        .unwrap();
+    config
+        .set_peer_side("tablet", PeerSide::Side(Side::Left))
+        .unwrap();
+    assert_eq!(
+        config.side_for_peer("tablet"),
+        Some(PeerSide::Side(Side::Left))
+    );
     assert_eq!(config.side_for_peer("notebook"), None);
     assert_eq!(config.peers.len(), 1);
-    config.set_peer_side("tablet", Side::Left);
+}
+
+#[test]
+fn all_peer_covers_every_edge_and_conflicts_atomically() {
+    let mut config = Config::default();
+    config.set_peer_side("notebook", PeerSide::All).unwrap();
+    for side in [Side::Left, Side::Right, Side::Top, Side::Bottom] {
+        assert_eq!(
+            config.peer_for_side(side).map(|peer| peer.name.as_str()),
+            Some("notebook")
+        );
+    }
+    assert!(
+        config
+            .set_peer_side("tablet", PeerSide::Side(Side::Top))
+            .is_err()
+    );
     assert_eq!(config.peers.len(), 1);
+    assert_eq!(config.side_for_peer("notebook"), Some(PeerSide::All));
+}
+
+#[test]
+fn conflicting_all_in_file_is_rejected() {
+    let directory = TempDir::new("config-conflicting-all");
+    let path = directory.path().join("config.toml");
+    std::fs::write(
+        &path,
+        "[[peer]]\nname = \"notebook\"\nside = \"all\"\n\n[[peer]]\nname = \"tablet\"\nside = \"left\"\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        Config::load(&path),
+        Err(ConfigError::Parse { .. })
+    ));
 }
 
 #[test]
 fn remove_peer_reports_whether_it_existed() {
     let mut config = Config::default();
-    config.set_peer_side("notebook", Side::Left);
+    config
+        .set_peer_side("notebook", PeerSide::Side(Side::Left))
+        .unwrap();
     assert!(config.remove_peer("notebook"));
     assert!(!config.remove_peer("notebook"));
     assert!(config.peers.is_empty());

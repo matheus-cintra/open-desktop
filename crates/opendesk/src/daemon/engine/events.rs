@@ -1,6 +1,7 @@
 use opendesk_core::session::SessionEvent;
 use opendesk_proto::control::ControlMessage;
 use opendesk_wayland::WaylandEvent;
+use std::sync::atomic::Ordering;
 use tracing::{debug, error};
 
 use super::Engine;
@@ -22,6 +23,14 @@ impl Engine {
             }
             WaylandEvent::EdgeEntered { side, position, .. } => {
                 if !self.enabled {
+                    return;
+                }
+                if self.return_drop_active
+                    || self
+                        .authorized_return_drop
+                        .as_ref()
+                        .is_some_and(|auth| auth.released)
+                {
                     return;
                 }
                 let fraction = self.edges.fraction(side, position).unwrap_or(0.5);
@@ -46,18 +55,44 @@ impl Engine {
             WaylandEvent::HotkeyPressed => self.dispatch(SessionEvent::HotkeyPressed),
             WaylandEvent::ClipboardChanged { content } => self.on_clipboard_changed(content),
             WaylandEvent::DragEnteredEdge {
+                generation,
                 side,
                 position,
                 uris,
                 ..
             } => {
-                self.on_drag_entered_edge(side, position, uris);
+                if generation != self.sinks.wayland.drag_generation.load(Ordering::Acquire) {
+                    return;
+                }
+                if self.session.is_controlled() {
+                    let fraction = self.edges.fraction(side, position).unwrap_or(0.5);
+                    if uris.is_empty() {
+                        self.dispatch(SessionEvent::EdgeEntered {
+                            side,
+                            fraction,
+                            peer: None,
+                        });
+                    } else {
+                        self.return_drag_crossing(generation, side, fraction, uris);
+                    }
+                    return;
+                }
+                self.on_drag_entered_edge(generation, side, position, uris);
             }
             WaylandEvent::DragMotionEdge { side, position } => {
                 self.on_drag_motion_edge(side, position);
             }
-            WaylandEvent::DragLeftEdge { side } => self.on_drag_left_edge(side),
-            WaylandEvent::DragReleasedEdge => self.on_drag_released_edge(),
+            WaylandEvent::DragLeftEdge { generation, side } => {
+                self.on_drag_left_edge(generation, side);
+            }
+            WaylandEvent::DragReleasedEdge { generation } => {
+                self.on_drag_released_edge(generation);
+            }
+            WaylandEvent::DragGeneration { generation } => self.on_drag_generation(generation),
+            WaylandEvent::DragFocusReady { id } => self.on_drag_focus_ready(id),
+            WaylandEvent::DropDragEnded { id, accepted } => {
+                self.on_drop_drag_ended(id, accepted);
+            }
             WaylandEvent::Fatal { message } => {
                 error!(message, "wayland connection failed");
                 self.fatal = Some(message);

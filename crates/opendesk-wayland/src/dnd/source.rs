@@ -14,14 +14,16 @@ use wayland_client::{Connection, QueueHandle};
 
 use crate::dnd::overlay::DropPhase;
 use crate::dnd::peek::{URI_LIST_MIME, render_uri_list};
-use crate::dnd::{BTN_LEFT, DROP_DRAG_TIMEOUT};
+use crate::dnd::{BTN_LEFT, DROP_DRAG_ACTIVE_TIMEOUT, DROP_DRAG_FOCUS_TIMEOUT};
 use crate::error::WaylandError;
+use crate::events::WaylandEvent;
 use crate::state::State;
 
 impl State {
     pub fn start_drop_drag(
         &mut self,
         queue_handle: &QueueHandle<State>,
+        id: u64,
         uris: Vec<PathBuf>,
     ) -> Result<(), WaylandError> {
         if self.dnd.manager.is_none() {
@@ -37,8 +39,8 @@ impl State {
         self.cancel_drop_drag();
         self.dnd.generation = self.dnd.generation.wrapping_add(1);
         let generation = self.dnd.generation;
-        let mut drag = self.create_drop_overlay(queue_handle, bytes, generation)?;
-        drag.timeout = self.arm_drop_timeout(generation);
+        let mut drag = self.create_drop_overlay(queue_handle, id, bytes, generation)?;
+        drag.timeout = self.arm_drop_timeout(generation, DROP_DRAG_FOCUS_TIMEOUT);
         tracing::info!(
             uris = uris.len(),
             "drop drag armed, waiting for overlay focus"
@@ -47,8 +49,12 @@ impl State {
         Ok(())
     }
 
-    fn arm_drop_timeout(&self, generation: u64) -> Option<calloop::RegistrationToken> {
-        let timer = Timer::from_duration(DROP_DRAG_TIMEOUT);
+    fn arm_drop_timeout(
+        &self,
+        generation: u64,
+        duration: std::time::Duration,
+    ) -> Option<calloop::RegistrationToken> {
+        let timer = Timer::from_duration(duration);
         match self
             .loop_handle
             .insert_source(timer, move |_, _, state: &mut State| {
@@ -64,14 +70,15 @@ impl State {
     }
 
     fn drop_drag_timeout(&mut self, generation: u64) {
-        let stuck =
-            self.dnd.drop.as_ref().is_some_and(|drag| {
-                drag.generation == generation && drag.phase != DropPhase::Dragging
-            });
+        let stuck = self
+            .dnd
+            .drop
+            .as_ref()
+            .is_some_and(|drag| drag.generation == generation);
         if !stuck {
             return;
         }
-        tracing::warn!("drop drag never acquired pointer focus, giving up");
+        tracing::warn!("drop drag timed out, giving up");
         if let Some(drag) = self.dnd.drop.as_mut() {
             drag.timeout = None;
         }
@@ -99,6 +106,7 @@ impl State {
         pointer.button(time, BTN_LEFT, true);
         if let Some(drag) = self.dnd.drop.as_mut() {
             drag.phase = DropPhase::AwaitingSerial;
+            drag.synthetic_button_down = true;
         }
     }
 
@@ -138,6 +146,8 @@ impl State {
             .ok_or(WaylandError::NoDataDeviceManager)?;
         let device = self.dnd.device.as_ref().ok_or(WaylandError::NoDataDevice)?;
         let drag = self.dnd.drop.as_ref().ok_or(WaylandError::NoDropDrag)?;
+        let id = drag.id;
+        let generation = drag.generation;
         let overlay = drag
             .overlay
             .as_ref()
@@ -152,22 +162,53 @@ impl State {
         if let Some(drag) = self.dnd.drop.as_mut() {
             drag.source = Some(source);
             drag.phase = DropPhase::Dragging;
+            if let Some(token) = drag.timeout.take() {
+                self.loop_handle.remove(token);
+            }
             if let Some(overlay) = drag.overlay.take() {
                 overlay.wl_surface().attach(None, 0, 0);
                 overlay.wl_surface().commit();
             }
             drag.overlay_buffer = None;
         }
+        let timeout = self.arm_drop_timeout(generation, DROP_DRAG_ACTIVE_TIMEOUT);
+        if let Some(drag) = self.dnd.drop.as_mut() {
+            drag.timeout = timeout;
+        }
+        if self
+            .dnd
+            .drop
+            .as_ref()
+            .is_some_and(|drag| drag.release_requested)
+        {
+            self.request_drop_release(id);
+        }
         Ok(())
     }
 
     pub fn cancel_drop_drag(&mut self) {
+        self.finish_drop_drag(false);
+    }
+
+    fn finish_drop_drag(&mut self, accepted: bool) {
         if let Some(drag) = self.dnd.drop.take() {
             if let Some(token) = drag.timeout {
                 self.loop_handle.remove(token);
             }
+            if let Some(token) = drag.release_timer {
+                self.loop_handle.remove(token);
+            }
+            if drag.synthetic_button_down
+                && let Some(pointer) = self.emulator.pointer.as_ref()
+            {
+                pointer.button(self.elapsed_millis(), BTN_LEFT, false);
+            }
             drag.icon.destroy();
-            tracing::debug!("drop drag cancelled");
+            self.emit(WaylandEvent::DropDragEnded {
+                id: drag.id,
+                accepted,
+            });
+            tracing::debug!(accepted, "drop drag ended");
         }
     }
 }
@@ -221,7 +262,7 @@ impl DataSourceHandler for State {
 
     fn dnd_finished(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &WlDataSource) {
         tracing::info!("drop drag source finished");
-        self.cancel_drop_drag();
+        self.finish_drop_drag(true);
     }
 
     fn action(

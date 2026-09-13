@@ -1,8 +1,14 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
+use opendesk_core::color::Rgba;
 use opendesk_core::config::Config;
+use opendesk_core::hotkey::Hotkey;
 use opendesk_core::peers::PeerStore;
+use opendesk_wayland::{BarStyle, HotkeySpec};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
@@ -18,6 +24,11 @@ use crate::daemon::net::udp::spawn_udp;
 use crate::daemon::transfer::remove_expired;
 
 const IPC_QUEUE: usize = 16;
+
+pub enum CompositorEvent {
+    LeftReleased(Instant),
+    EmergencyRelease,
+}
 
 pub async fn run_daemon() -> anyhow::Result<()> {
     let config_path = Config::default_path()?;
@@ -52,6 +63,7 @@ pub async fn run_daemon() -> anyhow::Result<()> {
     let ipc_task = spawn_ipc_server(ipc_socket.clone(), ipc_sender).await?;
     let (config_sender, config_events) = mpsc::unbounded_channel();
     let config_watcher = spawn_config_watch(&config_path, config_sender)?;
+    let compositor_events = spawn_compositor_listener().await?;
     let shutdown = spawn_signal_listener()?;
 
     let sinks = EngineSinks {
@@ -71,6 +83,7 @@ pub async fn run_daemon() -> anyhow::Result<()> {
         discovery_events,
         ipc_requests,
         config_events,
+        compositor_events,
         shutdown,
     };
     let outcome = engine.run(channels).await;
@@ -85,6 +98,69 @@ pub async fn run_daemon() -> anyhow::Result<()> {
         warn!(%error, "mdns shutdown failed");
     }
     outcome
+}
+
+async fn spawn_compositor_listener() -> anyhow::Result<mpsc::UnboundedReceiver<CompositorEvent>> {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .context("XDG_RUNTIME_DIR is needed for Hyprland's event socket")?;
+    let signature = std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE")
+        .filter(|value| !value.is_empty())
+        .context("HYPRLAND_INSTANCE_SIGNATURE is needed for Hyprland's event socket")?;
+    let path = PathBuf::from(runtime)
+        .join("hypr")
+        .join(signature)
+        .join(".socket2.sock");
+    let stream = UnixStream::connect(&path)
+        .await
+        .with_context(|| format!("connecting to Hyprland events at {}", path.display()))?;
+    let (sender, receiver) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        let mut stream = Some(stream);
+        loop {
+            let connected = match stream.take() {
+                Some(connected) => connected,
+                None => match UnixStream::connect(&path).await {
+                    Ok(connected) => connected,
+                    Err(error) => {
+                        warn!(%error, "Hyprland event socket reconnect failed");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                },
+            };
+            let mut lines = BufReader::new(connected).lines();
+            loop {
+                match lines.next_line().await {
+                    Ok(Some(line)) => {
+                        let event = match line.as_str() {
+                            "custom>>opendesk-left-release" => {
+                                tracing::debug!("Hyprland left-button release event received");
+                                Some(CompositorEvent::LeftReleased(Instant::now()))
+                            }
+                            "custom>>opendesk-emergency-release" => {
+                                tracing::debug!("Hyprland emergency release event received");
+                                Some(CompositorEvent::EmergencyRelease)
+                            }
+                            _ => None,
+                        };
+                        if let Some(event) = event
+                            && sender.send(event).is_err()
+                        {
+                            return;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        warn!(%error, "Hyprland event socket read failed");
+                        break;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    });
+    Ok(receiver)
 }
 
 fn spawn_signal_listener() -> anyhow::Result<oneshot::Receiver<()>> {
@@ -105,5 +181,24 @@ fn remove_socket(path: &Path) {
         && error.kind() != std::io::ErrorKind::NotFound
     {
         warn!(%error, path = %path.display(), "ipc socket cleanup failed");
+    }
+}
+
+pub(super) fn hotkey_spec(hotkey: &Hotkey) -> HotkeySpec {
+    HotkeySpec {
+        ctrl: hotkey.ctrl,
+        alt: hotkey.alt,
+        shift: hotkey.shift,
+        logo: hotkey.logo,
+        key: hotkey.key.clone(),
+    }
+}
+
+pub(super) fn bar_style(color: &Rgba) -> BarStyle {
+    BarStyle {
+        red: color.red,
+        green: color.green,
+        blue: color.blue,
+        alpha: color.alpha,
     }
 }

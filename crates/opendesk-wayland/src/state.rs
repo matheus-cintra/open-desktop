@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::time::Instant;
 
 use calloop::{LoopHandle, LoopSignal};
@@ -61,6 +63,7 @@ impl State {
         events: UnboundedSender<WaylandEvent>,
         loop_signal: LoopSignal,
         loop_handle: LoopHandle<'static, State>,
+        drag_generation: Arc<AtomicU64>,
     ) -> Result<State, WaylandError> {
         let shm = Shm::bind(globals, queue_handle)?;
         let pool = SlotPool::new(INITIAL_POOL_BYTES, &shm)?;
@@ -81,7 +84,7 @@ impl State {
             hotkey: HotkeyMatcher::new(),
             emulator: Emulator::default(),
             clipboard: Clipboard::new(globals, queue_handle),
-            dnd: Dnd::new(globals, queue_handle),
+            dnd: Dnd::new(globals, queue_handle, drag_generation),
             seat_keymap: None,
             events,
             started_at: Instant::now(),

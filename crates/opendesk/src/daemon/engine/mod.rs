@@ -5,26 +5,24 @@ mod drag;
 mod edges;
 mod events;
 mod forward;
+mod forward_drag;
 mod handshake;
 mod ipc;
 mod links;
 mod pairing;
+mod return_drag;
 mod tick;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use opendesk_core::color::Rgba;
 use opendesk_core::config::Config;
-use opendesk_core::hotkey::Hotkey;
 use opendesk_core::peers::PeerStore;
 use opendesk_core::pressed::PressedInputs;
 use opendesk_core::session::{Session, SessionConfig, SessionEvent, SessionState};
 use opendesk_proto::control::{ControlMessage, OutputGeometry, PeerId};
-use opendesk_wayland::{
-    BarStyle, HotkeySpec, StripSpec, WaylandCommand, WaylandEvent, WaylandHandle,
-};
+use opendesk_wayland::{StripSpec, WaylandCommand, WaylandEvent, WaylandHandle};
 use tokio::sync::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot;
 use tracing::{error, warn};
@@ -39,6 +37,7 @@ use links::LinkTable;
 use pairing::Pairing;
 
 pub use bootstrap::run_daemon;
+use bootstrap::{CompositorEvent, bar_style, hotkey_spec};
 
 const TICK: Duration = Duration::from_millis(100);
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
@@ -52,6 +51,7 @@ pub struct EngineChannels {
     pub discovery_events: UnboundedReceiver<DiscoveryEvent>,
     pub ipc_requests: Receiver<(IpcRequest, oneshot::Sender<IpcResponse>)>,
     pub config_events: UnboundedReceiver<ConfigChanged>,
+    pub compositor_events: UnboundedReceiver<CompositorEvent>,
     pub shutdown: oneshot::Receiver<()>,
 }
 
@@ -74,12 +74,14 @@ pub struct Engine {
     session: Session,
     active_peer: Option<PeerId>,
     forwarded: PressedInputs,
+    forwarded_left_pressed: bool,
+    outgoing_drag: Option<(PeerId, u64, Instant)>,
+    incoming_drag: Option<(PeerId, u64, bool)>,
     injected: PressedInputs,
     links: LinkTable,
     discovered: HashMap<PeerId, DiscoveredPeer>,
     outputs: Vec<OutputGeometry>,
     edges: EdgeMap,
-    desired_strips: Vec<StripSpec>,
     applied_strips: Vec<StripSpec>,
     local_keymap: Option<String>,
     enabled: bool,
@@ -89,11 +91,18 @@ pub struct Engine {
     last_ping_at: Instant,
     last_keepalive_at: Instant,
     clipboard_hash: Option<[u8; 32]>,
-    pending_drag: Option<drag::PendingDrag>,
+    pending_drag: Option<forward_drag::PendingDrag>,
     pending_transfer: drag::TransferPlanSlot,
     next_transfer_id: u64,
     drop_accumulator: crate::daemon::transfer::DropAccumulator,
     active_drop: Option<u64>,
+    active_drop_peer: Option<PeerId>,
+    active_drop_id: Option<u64>,
+    next_drop_id: u64,
+    return_drop_active: bool,
+    return_drop_since: Option<Instant>,
+    receiving_transfer: Option<(PeerId, u64)>,
+    authorized_return_drop: Option<control::ReturnAuthorization>,
     fatal: Option<String>,
 }
 
@@ -116,12 +125,14 @@ impl Engine {
             session,
             active_peer: None,
             forwarded: PressedInputs::default(),
+            forwarded_left_pressed: false,
+            outgoing_drag: None,
+            incoming_drag: None,
             injected: PressedInputs::default(),
             links: LinkTable::default(),
             discovered: HashMap::new(),
             outputs: Vec::new(),
             edges: EdgeMap::default(),
-            desired_strips: Vec::new(),
             applied_strips: Vec::new(),
             local_keymap: None,
             enabled: true,
@@ -136,6 +147,13 @@ impl Engine {
             next_transfer_id: 1,
             drop_accumulator,
             active_drop: None,
+            active_drop_peer: None,
+            active_drop_id: None,
+            next_drop_id: 1,
+            return_drop_active: false,
+            return_drop_since: None,
+            receiving_transfer: None,
+            authorized_return_drop: None,
             fatal: None,
         }
     }
@@ -154,6 +172,10 @@ impl Engine {
                 Some(ConfigChanged) = channels.config_events.recv() => {
                     self.config_dirty_since = Some(Instant::now());
                 }
+                Some(event) = channels.compositor_events.recv() => match event {
+                    CompositorEvent::LeftReleased(at) => self.on_left_released(at),
+                    CompositorEvent::EmergencyRelease => self.dispatch(SessionEvent::HotkeyPressed),
+                },
                 _ = ticker.tick() => self.on_tick(Instant::now()),
                 _ = &mut channels.shutdown => break Ok(()),
             }
@@ -168,7 +190,16 @@ impl Engine {
     }
 
     pub(super) fn dispatch(&mut self, event: SessionEvent) {
+        if matches!(event, SessionEvent::HotkeyPressed | SessionEvent::Disabled) {
+            self.abort_pending_drag();
+            self.authorized_return_drop = None;
+            self.cancel_active_drop();
+        }
+        let was_idle = matches!(self.session.state(), SessionState::Idle);
         let actions = self.session.handle(event, Instant::now());
+        if was_idle && !matches!(self.session.state(), SessionState::Idle) {
+            self.authorized_return_drop = None;
+        }
         for action in actions {
             self.apply(action);
         }
@@ -206,26 +237,28 @@ impl Engine {
     }
 
     pub(super) fn reconfigure_strips(&mut self) {
-        self.desired_strips = self.edges.rebuild(&self.outputs, &self.config);
+        self.edges.rebuild(&self.outputs, &self.config);
         self.apply_strips();
     }
 
     fn apply_strips(&mut self) {
-        let idle = matches!(self.session.state(), SessionState::Idle);
-        if !idle || self.desired_strips == self.applied_strips {
+        if !matches!(
+            self.session.state(),
+            SessionState::Idle | SessionState::Controlled { .. }
+        ) {
             return;
         }
-        self.applied_strips = self.desired_strips.clone();
-        self.wayland(WaylandCommand::ConfigureStrips {
-            strips: self.desired_strips.clone(),
-        });
+        let strips = self.edges.strips(&self.config, self.session.return_side());
+        if strips == self.applied_strips {
+            return;
+        }
+        self.applied_strips = strips.clone();
+        self.wayland(WaylandCommand::ConfigureStrips { strips });
     }
-
     pub(super) fn apply_hotkey(&self) {
         let hotkey = hotkey_spec(&self.config.general.release_hotkey);
         self.wayland(WaylandCommand::SetReleaseHotkey { hotkey });
     }
-
     pub(super) fn apply_bar_style(&self) {
         let style = bar_style(&self.config.general.bar_color);
         self.wayland(WaylandCommand::SetBarStyle { style });
@@ -263,24 +296,5 @@ fn session_config(local_id: PeerId, config: &Config) -> SessionConfig {
         reentry_grace: REENTRY_GRACE,
         immediate_cross: false,
         first_session_id: 1,
-    }
-}
-
-fn hotkey_spec(hotkey: &Hotkey) -> HotkeySpec {
-    HotkeySpec {
-        ctrl: hotkey.ctrl,
-        alt: hotkey.alt,
-        shift: hotkey.shift,
-        logo: hotkey.logo,
-        key: hotkey.key.clone(),
-    }
-}
-
-fn bar_style(color: &Rgba) -> BarStyle {
-    BarStyle {
-        red: color.red,
-        green: color.green,
-        blue: color.blue,
-        alpha: color.alpha,
     }
 }

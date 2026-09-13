@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::io::{BufRead, Write};
 use std::time::{Duration, Instant};
 
 use opendesk_wayland::{WaylandCommand, WaylandEvent, spawn};
@@ -11,32 +12,63 @@ const KEYMAP_WAIT: Duration = Duration::from_millis(500);
 
 fn main() -> InjectResult<()> {
     let steps: Vec<String> = std::env::args().skip(1).collect();
+    let stdin_mode = steps == ["--stdin"];
     if steps.is_empty() {
         eprintln!(
-            "usage: inject <abs:X,Y|motion:DX,DY|key:CODE:down|up|mods:DEPRESSED|button:CODE:down|up|sleep:MS>..."
+            "usage: inject [--stdin] <abs:X,Y|motion:DX,DY|key:CODE:down|up|mods:DEPRESSED|button:CODE:down|up|sleep:MS>..."
         );
         return Err("no steps given".into());
     }
     let (sender, mut events) = unbounded_channel();
     let handle = spawn(sender)?;
-    wait_for(&mut events, Duration::from_secs(2), |event| {
+    let ready = wait_for(&mut events, Duration::from_secs(2), |event| {
         matches!(event, WaylandEvent::Ready { .. })
     })
     .ok_or("no Ready event within 2 s")?;
+    if stdin_mode
+        && let WaylandEvent::Ready { outputs } = ready
+        && let Some(output) = outputs.first()
+    {
+        let x = f64::from(output.x) + f64::from(output.width) / 2.0;
+        let y = f64::from(output.y) + f64::from(output.height) / 2.0;
+        handle
+            .commands
+            .send(WaylandCommand::InjectAbsoluteMotion { x, y })?;
+        std::thread::sleep(SETTLE);
+    }
     if let Some(WaylandEvent::Keymap { xkb }) = wait_for(&mut events, KEYMAP_WAIT, |event| {
         matches!(event, WaylandEvent::Keymap { .. })
     }) {
         handle.commands.send(WaylandCommand::SetKeymap { xkb })?;
     }
-    for step in &steps {
-        match parse_step(step)? {
-            Step::Sleep(duration) => std::thread::sleep(duration),
-            Step::Command(command) => handle.commands.send(command)?,
+    if stdin_mode {
+        println!("inject ready");
+        std::io::stdout().flush()?;
+        for line in std::io::stdin().lock().lines() {
+            let line = line?;
+            if line == "quit" {
+                break;
+            }
+            run_step(&handle, &line)?;
+            println!("ok");
+            std::io::stdout().flush()?;
         }
-        std::thread::sleep(SETTLE);
+    } else {
+        for step in &steps {
+            run_step(&handle, step)?;
+        }
     }
     std::thread::sleep(Duration::from_millis(100));
     handle.shutdown()?;
+    Ok(())
+}
+
+fn run_step(handle: &opendesk_wayland::WaylandHandle, step: &str) -> InjectResult<()> {
+    match parse_step(step)? {
+        Step::Sleep(duration) => std::thread::sleep(duration),
+        Step::Command(command) => handle.commands.send(command)?,
+    }
+    std::thread::sleep(SETTLE);
     Ok(())
 }
 

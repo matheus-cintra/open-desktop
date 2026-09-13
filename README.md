@@ -11,30 +11,104 @@ Requirements: Hyprland >= 0.56 on both machines, same LAN.
 - M3: clipboard sync (text and images) between the two machines, always on, independent of the cursor.
 - M4: file drag across the edge — drag a file to the edge on one machine and it transfers and drops on the other.
 
-## Run
+## Install and run
 
-Build with `cargo build --release`, then on each machine:
+This MVP targets CachyOS and Arch Linux with one output each and an active
+Hyprland Lua session managed by UWSM. Both machines must run the same artifact:
+network protocol 2 rejects older protocol versions. GUI setup and packages are
+outside this MVP.
 
-```
-systemctl --user enable --now opendesk    # or: opendesk daemon
-opendesk pair <other-machine-name>          # type the PIN shown on the other machine
-opendesk peer set <other-machine-name> --side left   # where the other screen sits
-```
-
-`opendesk status` shows the state and the paired peers. The config lives at `~/.config/opendesk/config.toml`; `edge_threshold_px`, `edge_cancel_px` and `bar_color` tune the gesture and the bar.
-
-## Hyprland config
-
-Add this line so the bar appears and disappears instantly instead of Hyprland's default layer fade:
-
-```
-layerrule = no_anim on, match:namespace ^opendesk-bar$
+```sh
+cargo build --release --locked
+OPENDESK_BIN="$PWD/target/release/opendesk" ./scripts/install-user.sh
+systemctl --user start opendesk.service
+~/.local/bin/opendesk discover
+~/.local/bin/opendesk pair <other-machine-name>
+~/.local/bin/opendesk peer set <other-machine-name> --side all
+~/.local/bin/opendesk status
 ```
 
-The daemon needs the UDP and TCP port (default 47820) open between the two machines. With ufw:
+Read the pairing PIN from `opendesk status` on the other machine. Each machine
+creates its own identity; never copy identity or pairing tokens between hosts.
+To install remotely, copy the binary, `scripts/install-user.sh`, and
+`packaging/opendesk.service` into a separate staging directory over SSH, preserving
+that directory structure. Compare `sha256sum` and check `ldd` on both hosts before
+running the installer there with an absolute `OPENDESK_BIN`. Do not replace the
+remote checkout or depend on Syncthing for installation.
 
+The installer copies the executable into `~/.local/bin`, enables the user service,
+and adds `conf/opendesk.lua` to `~/.config/hypr/hyprland.lua`. It preserves existing
+modules and backs up replaced files under `~/.local/share/opendesk/backups`.
+Reinstallation preserves configuration, identity and pairing. The Lua module
+removes animation from the progress bar; no manual layer rule is needed.
+Its non-consuming mouse-release hook is also required to finish cross-machine
+file drops when Wayland's original drag holds the pointer grab.
+Symlinked main Lua configs are rejected before mutation.
+
+UWSM supplies the graphical environment through `graphical-session.target`, as
+[documented by Hyprland](https://wiki.hypr.land/Useful-Utilities/Systemd-start/).
+The service stores no temporary session identifiers. With an active session,
+the installer reloads Hyprland and checks its errors through the user service
+manager, including when invoked over SSH. A failed installation restores replaced
+files. Start the service explicitly after installation; future graphical sessions
+start the enabled service automatically.
+
+## Four edges
+
+`side` accepts `left`, `right`, `top`, `bottom`, or `all`; the positional form
+`opendesk peer set NAME left` remains supported. `all` owns all four outer edges
+on the supported single-output layout. Conflicts with another peer are rejected
+without changing the previous configuration. Status shows `all`; each network
+crossing still identifies one concrete direction.
+
+Push against any edge until the progress bar completes. Arrival uses the opposite
+edge and preserves proportional position. During remote control, only that entry
+edge returns control, including file drag. Other edges cannot start a crossing.
+`Ctrl+Alt+Esc` is the emergency release. Partial exposed edges in staggered
+multi-monitor layouts are not supported by this MVP.
+
+The config is `~/.config/opendesk/config.toml`; `edge_threshold_px`,
+`edge_cancel_px`, and `bar_color` tune resistance and the bar.
+
+## Diagnostics and network
+
+```sh
+systemctl --user status opendesk.service
+journalctl --user -u opendesk.service -f
+~/.local/bin/opendesk status
+~/.local/bin/opendesk discover
+systemd-run --user --wait --pipe --collect hyprctl configerrors
+ldd ~/.local/bin/opendesk
 ```
-sudo ufw allow from <lan-subnet>/24 to any port 47820
+
+Confirm the peer address is on the LAN. Allow TCP/UDP 47820 and mDNS UDP 5353
+only on the appropriate LAN interface/subnet, preserving existing firewall rules:
+
+```sh
+sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 47820 proto tcp
+sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 47820 proto udp
+sudo ufw allow in on <lan-interface> from <lan-subnet>/24 to any port 5353 proto udp
 ```
+
+After pairing, restarting both services must reconnect without another PIN.
+Automated checks: `cargo fmt --check`, `cargo clippy --workspace --all-targets --
+-D warnings`, `cargo test --workspace --locked`, `scripts/check-file-length.sh`,
+`bash test/install-user-sandbox.sh`, and the nested tests `test/e2e_m1.py` and
+`test/e2e_all_edges.py` (build the daemon and examples first). Physical mouse,
+keyboard shortcuts, clipboard and file drag must also be checked in both directions.
+
+## Stop, rollback and uninstall
+
+Run `opendesk release` to restore local control, or use `Ctrl+Alt+Esc`.
+`systemctl --user stop opendesk.service` stops the daemon;
+`systemctl --user disable --now opendesk.service` also disables automatic startup.
+
+`./scripts/install-user.sh uninstall` removes managed integration and restores
+preexisting launcher/unit/module backups. It preserves `config.toml`, `peers.toml`,
+and `identity.toml`. `./scripts/install-user.sh rollback-hyprland` restores the
+recorded main-config backup; then reload Hyprland with the diagnostic service-manager
+command above, replacing `configerrors` with `reload`. Backups remain available
+for manual recovery. Remove only the firewall rules added for this app if no
+longer needed. No checkout, configuration data or pairing store is deleted.
 
 Licensed under MIT or Apache-2.0, at your option.

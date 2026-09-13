@@ -82,6 +82,14 @@ impl Engine {
     fn on_closed(&mut self, connection: ConnectionId, reason: String) {
         if let Some((peer, link)) = self.links.remove_link(connection) {
             info!(%peer, name = link.name, reason, "peer disconnected");
+            if self
+                .pending_drag
+                .as_ref()
+                .is_some_and(|drag| drag.peer == peer)
+            {
+                self.cancel_pending_drag();
+            }
+            self.clear_return_drag(peer);
             self.dispatch(SessionEvent::PeerDisconnected { peer });
             if self.active_peer == Some(peer) {
                 self.active_peer = None;
