@@ -58,6 +58,7 @@ class Machine:
         self.dnd_dir = self.dir / "dnd"
         self.log = open(self.dir / "daemon.log", "w")
         self.daemon = None
+        self.injector = None
         self.service_name = f"{name}-{TAG}"
 
     def start_compositor(self):
@@ -83,6 +84,9 @@ class Machine:
         return poll(5, self.socket.exists)
 
     def stop(self):
+        if self.injector and self.injector.poll() is None:
+            self.injector.stdin.close()
+            self.injector.wait(timeout=5)
         if self.daemon and self.daemon.poll() is None:
             self.daemon.send_signal(signal.SIGKILL)
             self.daemon.wait(timeout=10)
@@ -122,7 +126,9 @@ class Machine:
         return float(x), float(y)
 
     def inject(self, *steps):
-        subprocess.run([INJECT, *steps], env=self.env, check=True, capture_output=True)
+        if self.injector is None:
+            self.injector = self.persistent_injector()
+        persistent_step(self.injector, *steps)
 
     def persistent_injector(self):
         process = subprocess.Popen([INJECT, "--stdin"], env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

@@ -38,7 +38,7 @@ do auxiliar foi observada no desktop. As janelas GUI foram abertas nas três má
 
 Logs em `docs/verification/map-20260913/` (diretório de logs ignorado pelo Git).
 
-- Linux: **182 testes Rust passaram**, 1 teste de notificações ignorado.
+- Linux: **183 testes Rust passaram**, 1 teste de notificações ignorado.
 - Mac: **117 testes Rust passaram**, usando os pacotes compatíveis com macOS.
   `cargo test --workspace` também tenta compilar o backend exclusivo Wayland;
   o comando correto no Mac seleciona opendesk/core/proto/platform/macos.
@@ -165,3 +165,14 @@ autorização/reinício automático no Mac. Medir transferência após o limiar 
 
 Não considerar latência, retomada física ou percurso nas máquinas reais provados
 pelos testes automatizados. A funcionalidade está instalada para esse aceite.
+
+## Verificação para publicação da alpha
+
+A revisão para release repetiu os 183 testes Rust Linux, 117 testes Rust Mac,
+Clippy, testes nativos Mac, instalador sandbox, 6 testes de bootstrap, 5 testes
+do assistente CLI e 7 testes do auxiliar de atividade.
+A suíte gráfica de quatro bordas passou 88/88 após corrigir o injetor do teste
+para manter o dispositivo virtual entre movimentos; a versão estável também
+falhava com o injetor recriado a cada comando. Essa suíte cobre o modo legado
+sem mapa e não substitui o aceite físico do mapa relatado acima.
+A suíte de bloqueio aninhada passou 66/66; também cobre o modo legado.
