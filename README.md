@@ -19,7 +19,7 @@
 
 ## Instalação
 
-**Primeira release pública em preparação.** O comando abaixo estará disponível após a publicação da tag de versão. Por enquanto, use a [instalação pelo código](#pelo-código).
+[Baixar a release mais recente](https://github.com/matheus-cintra/open-desktop/releases/latest) · [Instalar pelo código](#pelo-código)
 
 Nos **dois computadores**, abra um terminal na sessão Hyprland iniciada com UWSM:
 
