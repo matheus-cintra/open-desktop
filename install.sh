@@ -1,5 +1,5 @@
 #!/bin/sh
-# Open Desktop release bootstrap. Interactive pairing happens in `opendesk setup`.
+# Open Desktop release bootstrap. Setup reads the terminal, not the script pipe.
 set -eu
 fail() { printf 'Open Desktop: %s\n' "$*" >&2; exit 1; }
 [ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || fail 'Requer Linux x86_64.'
@@ -36,5 +36,12 @@ ldd "$stage/opendesk" > "$stage/ldd.txt" 2>&1 || { cat "$stage/ldd.txt" >&2; fai
 if grep -q 'not found' "$stage/ldd.txt"; then cat "$stage/ldd.txt" >&2; fail 'Instale as dependências indicadas acima.'; fi
 "$stage/opendesk" --version
 "$stage/opendesk" install
-printf '\nPróximo passo, nos dois computadores:\n  ~/.local/bin/opendesk setup\n'
+if [ "${OPENDESK_NO_SETUP:-0}" != 1 ]; then
+    if ( : </dev/tty ) 2>/dev/null; then
+        printf '\nAbrindo configuração…\n'
+        "$stage/opendesk" setup </dev/tty >/dev/tty 2>&1
+    else
+        printf '\nInstalação concluída. Execute em um terminal: ~/.local/bin/opendesk setup\n'
+    fi
+fi
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) printf '\nAdicione ~/.local/bin ao PATH do seu shell para usar apenas opendesk.\n';; esac

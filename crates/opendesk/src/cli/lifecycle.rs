@@ -65,7 +65,8 @@ pub fn update(version: Option<&str>) -> anyhow::Result<()> {
     checked(
         Command::new("sh")
             .arg(script)
-            .arg(version.unwrap_or("latest")),
+            .arg(version.unwrap_or("latest"))
+            .env("OPENDESK_NO_SETUP", "1"),
     )
 }
 

@@ -18,7 +18,9 @@ O nome do pacote é estável; a URL da release fixa a versão. Isso permite inst
 somente a entrada esperada do manifesto e não executa o binário quando o download,
 o checksum ou as dependências falham. Checksums não são assinaturas independentes.
 
-O bootstrap chama `opendesk install`. A CLI embute `scripts/install-user.sh` e a
+O bootstrap chama `opendesk install` e abre `setup` usando `/dev/tty`, inclusive
+quando executado por `curl | sh`. Sem terminal, informa como configurar depois.
+`OPENDESK_NO_SETUP=1` suprime o assistente; `opendesk update` usa essa opção. A CLI embute `scripts/install-user.sh` e a
 unidade systemd: instalação local, download, atualização e remoção compartilham a
 mesma rotina. A instalação exige sessão Hyprland Lua/UWSM ativa, preserva os
 módulos existentes e recusa o arquivo principal Lua quando ele é um link simbólico.

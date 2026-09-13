@@ -25,16 +25,15 @@ Nos **dois computadores**, abra um terminal na sessão Hyprland iniciada com UWS
 
 ```sh
 curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/latest/download/install.sh | sh
-~/.local/bin/opendesk setup
 ```
 
-Sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. `setup` inicia o serviço e orienta o pareamento. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
+Sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. Ao terminar, o instalador abre automaticamente o assistente, que inicia o serviço e orienta o pareamento. Sem terminal interativo, execute `opendesk setup` depois. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
 
 Prefere inspecionar o script? Baixe o `install.sh` da release, leia e execute `sh install.sh`. Para uma versão específica: `sh install.sh v0.1.0`.
 
 ## Primeira conexão
 
-1. Execute `opendesk setup` nas duas máquinas, conectadas à mesma LAN.
+1. Instale nas duas máquinas, conectadas à mesma LAN. O assistente abre automaticamente; para voltar a ele depois, execute `opendesk setup`.
 2. Em uma, escolha **Iniciar pareamento** e selecione o outro computador.
 3. Na outra, escolha **Receber**. Digite o PIN exibido nela no computador que iniciou.
 4. O assistente configura as quatro bordas em cada máquina. Se já estiverem pareadas, escolha **Configurar peer existente**.
