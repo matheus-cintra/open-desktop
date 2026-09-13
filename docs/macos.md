@@ -1,11 +1,11 @@
-# macOS / Apple Silicon — experimental alpha
+# macOS / Apple Silicon — experimental support
 
-The `0.3.0-alpha.1` alpha targets Apple Silicon on macOS 26, paired with a
+Version `0.3.0` targets Apple Silicon on macOS 26, paired with a
 Hyprland Linux computers. Use one active display on each computer. This is an
-experimental public prerelease, signed with a development certificate and not notarized.
+experimental Mac build, signed with a development certificate and not notarized.
 
 Download `open-desktop-macos-arm64.zip` and `SHA256SUMS-macos` from the
-[v0.3.0-alpha.1 release](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0-alpha.1).
+[v0.3.0 release](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0).
 Verify the ZIP with `shasum -a 256 -c SHA256SUMS-macos`, unzip it, quit the old OD app
 and its organization window, and move **Open Desktop.app** into `~/Applications`.
 Keep a backup of your old app before replacement. Open the app and grant its permissions.

@@ -21,32 +21,37 @@
 
 [Baixar a release mais recente](https://github.com/matheus-cintra/open-desktop/releases/latest) · [Instalar pelo código](#pelo-código)
 
-Nos **dois computadores**, abra um terminal na sessão Hyprland iniciada com UWSM:
+Nos **computadores Linux**, abra um terminal na sessão Hyprland iniciada com UWSM:
 
 ```sh
 curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/latest/download/install.sh | sh
 ```
 
-Sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. Ao terminar, o instalador abre automaticamente o assistente, que inicia o serviço e orienta o pareamento. Sem terminal interativo, execute `opendesk setup` depois. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
+O daemon é instalado sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. Ao terminar, o instalador abre automaticamente o assistente, que inicia o serviço e orienta o pareamento. Sem terminal interativo, execute `opendesk setup` depois. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
 
 Prefere inspecionar o script? Baixe o `install.sh` da release, leia e execute `sh install.sh`. Para uma versão específica: `sh install.sh v0.1.0`.
 
 ## Primeira conexão
 
-1. Instale nas duas máquinas, conectadas à mesma LAN. O assistente abre automaticamente; para voltar a ele depois, execute `opendesk setup`.
-2. Em uma, escolha **Iniciar pareamento** e selecione o outro computador.
-3. Na outra, escolha **Receber**. Digite o PIN exibido nela no computador que iniciou.
-4. O assistente configura as quatro bordas em cada máquina. Se já estiverem pareadas, escolha **Configurar peer existente**.
-5. Empurre o cursor contra uma borda até a barra completar. O teclado acompanha.
+1. Instale a mesma versão em todas as máquinas, conectadas à mesma LAN.
+2. Use `opendesk setup` ou **Adicionar computador** na GUI para parear cada par de computadores.
+3. No Linux, instale o auxiliar de atividade com `opendesk install-activity` (sudo).
+4. Abra `opendesk gui` no Linux ou **OD → Organizar computadores…** no Mac.
+5. Arraste os cartões para representar a disposição das telas e clique em **Aplicar**.
+6. Empurre o cursor contra uma borda conectada. O teclado acompanha até o próximo destino.
 
-Você entra pela borda oposta, na mesma posição proporcional. Para voltar, use **somente a borda de entrada**; as outras três não devolvem o controle. **Ctrl+Alt+Esc** libera o controle imediatamente.
-
-O app funciona em segundo plano. Nenhum terminal precisa permanecer aberto. Clipboard sincroniza mesmo quando o cursor está local.
+A disposição sincroniza entre as máquinas. Qualquer teclado/mouse físico pode ser a
+origem; atividade física em outra máquina assume o controle local. Computadores
+bloqueados são pulados quando há um destino elegível na mesma direção.
+**Ctrl+Alt+Esc** libera o controle imediatamente. Fechar a janela do mapa mantém o
+compartilhamento ativo. O clipboard sincroniza mesmo quando o cursor está local.
 
 ## Comandos
 
 | Quero… | Comando |
 |---|---|
+| Organizar computadores | `opendesk gui` |
+| Instalar auxiliar de atividade física (Linux, sudo) | `opendesk install-activity` |
 | Configurar ou parear | `opendesk setup` |
 | Ver conexão, endereço e bordas | `opendesk status` |
 | Encontrar computadores | `opendesk discover` |
@@ -62,7 +67,7 @@ O app funciona em segundo plano. Nenhum terminal precisa permanecer aberto. Clip
 Pausar impede novas passagens; não desliga a sincronização do clipboard. Use `stop` para desligar o serviço inteiro. `enable` e `disable` continuam disponíveis como aliases de `resume` e `pause`.
 
 <details>
-<summary>Pareamento e bordas manualmente</summary>
+<summary>Pareamento e modo legado de bordas (antes de aplicar um mapa)</summary>
 
 ```sh
 opendesk pair NOME
@@ -79,14 +84,14 @@ Também são aceitos `right`, `top`, `bottom` e a sintaxe anterior `peer set NOM
 
 | Suporte inicial | Escopo |
 |---|---|
-| Sistema | Arch Linux e CachyOS, x86_64 |
+| Sistema | Arch Linux e CachyOS x86_64; Apple Silicon/macOS 26 experimental |
 | Sessão testada | Hyprland **0.56.2**, configuração **Lua**, gerenciada pelo **UWSM** |
-| Telas | Dois computadores, um monitor em cada; resoluções diferentes aceitas |
+| Telas | Três computadores validados, uma tela ativa por computador |
 | Rede | Mesma LAN confiável; TCP/UDP **47820**, mDNS UDP **5353** |
 | Clipboard | Texto e imagens |
-| Arquivos | Arrasto entre aplicações compatíveis, validado com Thunar |
+| Arquivos | Arraste Linux ↔ Linux; sem Finder DnD ou terceiro computador |
 
-**O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo da versão estável é 2; versões de protocolo incompatíveis são rejeitadas.
+**O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo atual é 4; versões de protocolo incompatíveis são rejeitadas.
 
 Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, Windows. O macOS tem apenas a prévia local descrita abaixo. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
 
@@ -111,34 +116,20 @@ cargo build --release --locked
 ~/.local/bin/opendesk setup
 ```
 
-## Alpha 0.3.0 — mapa e macOS
+## macOS e atividade física
 
-A [pré-release 0.3.0-alpha.1](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0-alpha.1)
-traz mapa compartilhado, controle contínuo entre três computadores e tomada de
-controle por atividade física. Use a mesma alpha em todos os computadores:
-**protocolo 4**, incompatível com as versões anteriores. Identidades e pareamentos
-são preservados. Uma tela ativa por computador; Linux Hyprland e Apple Silicon/macOS 26.
+Baixe `open-desktop-macos-arm64.zip` da [release 0.3.0](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0).
+Veja [instalação e permissões do Mac](docs/macos.md). O pacote Mac usa assinatura de
+desenvolvimento e não é notarizado. Atualizações no Mac são manuais, pelo `.app`;
+`opendesk update` é suportado somente no Linux.
 
-No Linux, instale explicitamente a alpha (o link `latest` acima continua na estável):
+O auxiliar Linux requer sudo para instalar um serviço dedicado. Ele publica somente
+notificações de atividade física, sem teclas ou texto, e não adiciona seu usuário ao
+grupo input. Para removê-lo: `opendesk uninstall-activity`.
 
-```sh
-curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/download/v0.3.0-alpha.1/install.sh -o /tmp/opendesk-install.sh
-sh /tmp/opendesk-install.sh v0.3.0-alpha.1
-opendesk install-activity
-opendesk gui
-```
-
-O auxiliar de atividade requer sudo para instalar um serviço dedicado. Ele publica
-somente notificações de atividade física; não publica teclas ou texto e não adiciona
-seu usuário ao grupo input. Pareie os computadores entre si e use **Aplicar** na
-janela de organização. Fechar a janela mantém o daemon funcionando. No Mac, abra
-**OD → Organizar computadores…**. Veja [instalação e permissões do Mac](docs/macos.md).
-
-Na alpha, computadores bloqueados são pulados e não recebem entrada. Arquivos por
-arraste continuam limitados a Linux ↔ Linux, sem atravessar um terceiro computador.
-Finder DnD não é suportado. [Notas e pendências de validação](docs/release-0.3.0-alpha.1.md).
-As instruções de bordas e tela bloqueada da versão estável abaixo não descrevem o
-modo de mapa da alpha.
+Identidades e pareamentos são preservados. O protocolo 4 é incompatível com as
+versões anteriores: atualize todos os computadores. Consulte as
+[notas e pendências de validação](docs/release-0.3.0.md).
 
 ## Desenvolvimento
 
@@ -150,15 +141,8 @@ Distribuído sob **MIT ou Apache-2.0**, à sua escolha.
 
 ### Tela bloqueada
 
-Você pode entrar em um destino bloqueado, movimentar o mouse e digitar a senha.
-Para voltar sem desbloquear, mova o mouse para fora pela mesma borda por onde
-entrou, após os 300 ms de proteção da chegada. As outras bordas não devolvem o
-controle. Ao desbloquear, a sessão continua normalmente. Instale a mesma versão
-nos dois computadores para usar esse comportamento nos dois sentidos.
-
-Se a origem bloquear enquanto captura o mouse, o controle será liberado nos dois
-lados. Arrastos de arquivos para um destino bloqueado são recusados; bloquear
-durante um arrasto cancela a operação. Se o monitor do compositor perder estado
-válido por um segundo, o controle volta automaticamente; novas concessões são
-recusadas enquanto o estado local é desconhecido. Desbloquear não desfaz `pause`.
-Iniciar uma transferência a partir de uma origem bloqueada não é suportado.
+No modo de mapa, uma máquina bloqueada não recebe controle. Se houver outra tela
+elegível alinhada na direção da saída, a máquina bloqueada é pulada. Bloquear a
+origem ou o destino durante controle remoto libera a sessão. Desbloquear não
+desfaz `pause`. O modo legado por bordas permanece disponível antes de aplicar
+um mapa; seu comportamento é diferente e não deve ser usado para representar o mapa.

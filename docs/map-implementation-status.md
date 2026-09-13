@@ -2,7 +2,7 @@
 
 Atualizado em 2026-09-13. A versão **0.3.0-alpha.1, protocolo 4**, foi implementada,
 compilada e instalada nos três computadores. O usuário autorizou a publicação pública como alpha experimental com pendências
-documentadas em `release-0.3.0-alpha.1.md`. O aceite físico completo ainda não está concluído.
+documentadas em `release-0.3.0.md`. O aceite físico completo ainda não está concluído.
 
 ## Instalação verificada
 
@@ -176,3 +176,7 @@ para manter o dispositivo virtual entre movimentos; a versão estável também
 falhava com o injetor recriado a cada comando. Essa suíte cobre o modo legado
 sem mapa e não substitui o aceite físico do mapa relatado acima.
 A suíte de bloqueio aninhada passou 66/66; também cobre o modo legado.
+
+O usuário posteriormente autorizou publicar como **v0.3.0**, versão mais recente,
+com as mesmas pendências documentadas. A tentativa de CI da tag alpha foi cancelada
+antes da publicação. O código funcional é o mesmo; a versão e a documentação mudaram.

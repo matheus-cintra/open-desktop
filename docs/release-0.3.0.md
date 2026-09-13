@@ -1,4 +1,4 @@
-# Open Desktop 0.3.0-alpha.1
+# Open Desktop 0.3.0
 
 - Janela para organizar e sincronizar a disposição dos computadores.
 - Controle contínuo entre três máquinas, com teclado/mouse de qualquer uma.
@@ -10,7 +10,7 @@
 
 Use esta mesma versão em todos os computadores: protocolo **4**, incompatível
 com versões anteriores. Identidades e pareamentos são preservados.
-No Linux, execute `opendesk update v0.3.0-alpha.1` ou o instalador desta tag.
+No Linux, execute `opendesk update v0.3.0` ou o instalador desta tag.
 Instale o auxiliar de atividade com `opendesk install-activity` (sudo) e abra
 `opendesk gui`. No Mac, use o ZIP ARM64 e as [instruções de instalação](macos.md).
 O pacote Mac tem assinatura de desenvolvimento; não é notarizado.
@@ -27,12 +27,12 @@ Ainda não concluídos: intermediário offline e reconexão; edição pela GUI d
 verificação específica do cursor da origem e retorno por outra borda; Control do
 Mac → Super do Linux; matriz completa de clipboard; nova autorização com reinício
 automático; medição física de transferência ≤250 ms e recuperação ≤1 segundo;
-estabilidade prolongada. O usuário autorizou a publicação experimental com essas
+estabilidade prolongada. O usuário autorizou a publicação como versão mais recente com essas
 pendências. Testes automatizados não substituem esses resultados físicos.
 
 Uma tela ativa por computador. Finder DnD e arraste atravessando uma terceira
 máquina não são suportados. Use somente em LAN confiável: o transporte ainda não
-é criptografado. A release está marcada como pré-release e não substitui `latest`.
+é criptografado. A release 0.3.0 é a versão mais recente (`latest`).
 
 ## Manutenção
 
