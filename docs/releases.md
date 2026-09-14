@@ -15,8 +15,9 @@ A release contém:
 - nas versões com Mac: `open-desktop-macos-arm64.zip` e `SHA256SUMS-macos`,
   compilados no Mac a partir do mesmo commit, com assinatura de desenvolvimento.
 
-O nome do pacote é estável; a URL da release fixa a versão. Isso permite instalar
-`latest` sem interpretar JSON da API do GitHub. O instalador usa HTTPS, verifica
+O nome do pacote é estável; a URL da release fixa a versão. No Linux, isso permite instalar
+`latest` sem interpretar JSON da API do GitHub. No Mac, o updater resolve `latest`
+para uma tag concreta antes de baixar os dois assets da mesma release. O instalador usa HTTPS, verifica
 somente a entrada esperada do manifesto e não executa o binário quando o download,
 o checksum ou as dependências falham. Checksums não são assinaturas independentes.
 
@@ -37,6 +38,7 @@ cargo test --workspace --locked
 bash scripts/check-file-length.sh
 bash test/install-user-sandbox.sh
 python3 test/bootstrap.py
+python3 test/macos-update-test.py
 cargo build --bin opendesk --locked
 python3 test/setup-cli.py
 cargo build --release --locked

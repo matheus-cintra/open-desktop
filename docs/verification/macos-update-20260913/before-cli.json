@@ -1,0 +1,44 @@
+{
+  "version": "opendesk 0.3.0",
+  "status": {
+    "platform": "macos",
+    "input_status": "session-unavailable",
+    "name": "Matheuss-MacBook-Pro",
+    "peer_id": "bdcb4aa1ab944406a7a3c214184d9368",
+    "state": "idle",
+    "enabled": true,
+    "peers": [
+      {
+        "name": "cachyos",
+        "side": "left",
+        "connected": true,
+        "address": "192.168.15.6:47820"
+      },
+      {
+        "name": "archlinux",
+        "side": null,
+        "connected": true,
+        "address": "192.168.15.10:55260"
+      }
+    ]
+  },
+  "config_hashes": {
+    "config.toml": "573237fffa4a8f59e1cb948730caf9d22de9f1ccbefc71aba497ac9db8cb8c7a",
+    "control-clock.json": "2ac878b0e2180616993b4b6aa71e61166fdc86c28d47e359d0ee537eb11d46d3",
+    "identity.toml": "cc139f96e7bb3667c6c54ed514706c2dcdf51a72d8e95f2f62a94d30232c3e40",
+    "map-conflict-1-e14e9fdb02d4477fa11769f66af29251.json": "e21dacb43393d7c101a71903c36408f7a8467678d57c2c3b31a0b258a0593db8",
+    "map-conflict-2-e14e9fdb02d4477fa11769f66af29251.json": "0f6388d798ac553cd806a447d4b939f6e4d81d2c0440097edc82a006a84025b6",
+    "map-conflict-3-e14e9fdb02d4477fa11769f66af29251.json": "ccacaee1a0cfe86f87c518fe359abd7f542e5720ca36de8e7380206aba13ca0e",
+    "map-conflict-4-e14e9fdb02d4477fa11769f66af29251.json": "f7ef2c920d98fd6aca59dd06b6ac44cef03cfcc1dcdd0cdbb77af3a43efc353f",
+    "map-conflict-5-5723c4608d704762ba32e1c0afd2cfcb.json": "c8f3f5e71ade3755b23366f9164a679aff15ee7fd143ba02c4bd20335ea2464a",
+    "map-conflict-6-e14e9fdb02d4477fa11769f66af29251.json": "ba114919fb6bd4986260dd042282aecdc3bb9242f599d1c76ac6c9a1f3617e36",
+    "map-conflict-7-e14e9fdb02d4477fa11769f66af29251.json": "d745910f5d2a0f3f81ce19f177d02b886197703307f62791b28a9b22f0947c2c",
+    "map.json": "b4337ee12cd925f926c7b71afa056ae5d7cbdea2113bdd3fc380de10eadfc560",
+    "peers.toml": "bbea08bf326df1004257ea9883a7ba6935d8c7f1485f248ba7ac35f53055e569"
+  },
+  "map_hash": "aed7ccf24da66070bf228b81bab692f1ee0c0ee56d8fe7b58661705f4e8d6092",
+  "processes": [
+    "62643 /Users/matheuscintra/Applications/Open Desktop.app/Contents/MacOS/opendesk",
+    "62685 /Users/matheuscintra/Applications/Open Desktop.app/Contents/MacOS/opendesk gui"
+  ]
+}

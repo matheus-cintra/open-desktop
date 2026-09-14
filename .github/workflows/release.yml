@@ -30,6 +30,7 @@ jobs:
           bash scripts/check-file-length.sh
           bash test/install-user-sandbox.sh
           python3 test/bootstrap.py
+          python3 test/macos-update-test.py
           python3 test/activity_helper_test.py
           cargo build --bin opendesk --locked
           python3 test/setup-cli.py

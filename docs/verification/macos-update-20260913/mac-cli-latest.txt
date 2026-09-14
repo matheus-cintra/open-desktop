@@ -1,0 +1,7 @@
+Closing organization window: unapplied edits are not part of the saved map.
+Backup: /Users/matheuscintra/Library/Application Support/Open Desktop/backups/update.oa8eids1
+Installed /Users/matheuscintra/Applications/Open Desktop.app
+Release: v0.3.0
+Closing organization window: unapplied edits are not part of the saved map.
+Backup: /Users/matheuscintra/Library/Application Support/Open Desktop/backups/update.w8l7yq_q
+Installed /Users/matheuscintra/Applications/Open Desktop.app

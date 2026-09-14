@@ -1,0 +1,6 @@
+Linux: cargo fmt --all --check; bash scripts/check-file-length.sh; cargo test --workspace --locked (183 passed, 1 ignored); cargo clippy --workspace --all-targets --locked -- -D warnings: PASS
+macOS: cargo +1.98.0 fmt --all --check; bash scripts/check-file-length.sh; cargo +1.98.0 test -p opendesk -p opendesk-core -p opendesk-proto -p opendesk-platform -p opendesk-macos --locked (117 passed); equivalent Clippy --all-targets -- -D warnings: PASS
+Linux/macOS: python3 test/macos-update-test.py: 23 passed on each host
+macOS: python3 test/macos-update-native.py: 6 passed
+macOS: bash test/macos-native.sh: native mapping, geometry and outward edges passed; no input captured/injected
+Bash syntax and git diff --check: PASS

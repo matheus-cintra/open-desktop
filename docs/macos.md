@@ -1,11 +1,11 @@
 # macOS / Apple Silicon — experimental support
 
-Version `0.3.0` targets Apple Silicon on macOS 26, paired with a
+Version `0.3.1` targets Apple Silicon on macOS 26, paired with a
 Hyprland Linux computers. Use one active display on each computer. This is an
 experimental Mac build, signed with a development certificate and not notarized.
 
 Download `open-desktop-macos-arm64.zip` and `SHA256SUMS-macos` from the
-[v0.3.0 release](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0).
+[v0.3.1 release](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.1).
 Verify the ZIP with `shasum -a 256 -c SHA256SUMS-macos`, unzip it, quit the old OD app
 and its organization window, and move **Open Desktop.app** into `~/Applications`.
 Keep a backup of your old app before replacement. Open the app and grant its permissions.
@@ -34,9 +34,9 @@ The one-time trust helper authorizes that certificate only for code signing in t
 current user's trust settings. This is not a Developer ID signature or notarized release.
 The designated requirement pins both the certificate and bundle identifier.
 
-Normal updates signed with the same certificate preserve TCC permissions. Moving
-from older ad hoc builds to this identity requires one final authorization; only
-an actual identity change triggers the installer's scoped permission reset.
+The installer requires the same signing certificate and designated requirement as
+the installed app. It never resets TCC. Identity migrations, including old ad hoc
+builds, are rejected before closing the app and require a separate migration.
 
 While permission is pending, the app checks approval in a fresh, noninteractive
 process every two seconds. If that process confirms both grants but the running
@@ -55,7 +55,63 @@ Pair by choosing a discovered computer and entering the PIN displayed on the
 receiving computer. A received pairing request shows its PIN in the menu.
 Use **Organizar computadores…** to arrange the shared map and apply it. CLI `setup`, `status`, `discover`,
 `pair`, `peer`, `pause`, `resume`, `release`, `start`, `stop`, `restart`, `doctor` and
-`logs` remain available. Public `update` is deliberately unavailable on macOS.
+`logs` remain available. Builds containing the updater also support `update`; see below.
+
+## Update and recovery
+
+From a build containing the updater:
+
+```sh
+opendesk update            # latest stable public release
+opendesk update latest
+opendesk update v0.3.0     # explicit version; reinstall/downgrade allowed
+```
+
+The updater embeds its installer; no source checkout is needed. It uses macOS
+`/usr/bin/python3` (provided by Apple's Command Line Tools), `curl`, `ditto`,
+`codesign`, and LaunchServices. The destination is always
+`~/Applications/Open Desktop.app`, without sudo. Local builds still install with
+`bash scripts/install-macos.sh`; the same transaction and identity checks apply.
+A checkout can also run `bash scripts/install-macos.sh update v0.3.0`.
+
+`latest` is resolved to a concrete release tag before downloading the ARM64 ZIP
+and `SHA256SUMS-macos` over HTTPS from that release. Exactly one matching checksum
+is required. ZIP paths, file types, bundle metadata, ARM64 architecture, version,
+signature, signing certificate and installed designated requirement are checked
+before processes are stopped. This follows Apple's
+[code signing requirement model](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
+
+An exclusive lock prevents concurrent installs. Staging lives on the destination
+filesystem. The installer warns before closing the organization window: **unapplied
+edits are not saved**. It targets only processes whose executable is the installed
+bundle, quits the AppKit app normally to release input, and allows at most ten
+seconds for shutdown. Persistent data and preferences are backed up after shutdown.
+The signing keychain, TCC grants and login registration are left in place; the app
+keeps the same bundle path and identity. It does not register or unregister login.
+
+Private backups are retained in
+`~/Library/Application Support/Open Desktop/backups/update.*`. Each contains the
+previous bundle, config/identity/peers/map, app preferences, prior CLI link and a
+manifest. Treat these backups as sensitive: they contain pairing credentials.
+After replacement the installer registers the bundle, updates the CLI link, opens
+the app and requires IPC within thirty seconds, including verification that the
+IPC peer PID belongs to the installed bundle. It also reopens the organization
+window if it was open. IPC health does not establish physical input permission.
+
+On failure after replacement, it stops the candidate and restores the bundle,
+data, preferences and CLI link, then registers and reopens the previous app if it
+was running. The command still returns failure. A transaction journal at
+`~/Library/Application Support/Open Desktop/update-transaction.json` allows the
+next invocation to recover an interrupted update; after recovery, rerun the
+requested command. Catchable termination signals also trigger recovery.
+
+If recovery fails, preserve the journal, printed backup directory and hidden
+`.opendesk-*` staging directories in `~/Applications`. Close the app and organization
+window and rerun the installer to retry recovery. Never delete the only recoverable
+copy. Backups are not removed automatically; remove old ones only after verifying
+the installation. An updater-less installed version requires the installer from a
+checkout to recover/update again. In particular, the existing public **v0.3.0 does
+not contain this updater**; installing it removes the new CLI capability. Version 0.3.1 includes the updater; older v0.3.0 assets remain unchanged.
 
 ## Behavior
 
@@ -111,6 +167,8 @@ advertised.
 
 ```sh
 cargo fmt --all --check
+bash scripts/check-file-length.sh
+python3 test/macos-update-test.py
 # Linux:
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
@@ -120,6 +178,7 @@ cargo +1.98.0 clippy -p opendesk -p opendesk-core -p opendesk-proto \
 cargo +1.98.0 test -p opendesk -p opendesk-core -p opendesk-proto \
   -p opendesk-platform -p opendesk-macos --locked
 bash test/macos-native.sh
+python3 test/macos-update-native.py # uses installed signed app; disposable copies
 ```
 
 The native tests check keyboard mappings, logical coordinates and outward motion
@@ -129,3 +188,5 @@ modifier swapping, held/repeated keys, double-clicks, scrolling, text and screen
 clipboard, emergency release, disconnect, lock/sleep and permission recovery.
 Launching and querying the app over SSH proves process/network/IPC behavior only.
 Record physical observations separately from builds and automated tests.
+
+Updater implementation verification: [2026-09-13 report](verification/macos-update-20260913/report.md).

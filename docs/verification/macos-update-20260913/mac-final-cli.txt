@@ -1,0 +1,15 @@
+Ran 23 tests in 0.622s
+OK
+Ran 6 tests in 1.914s
+OK
+Built /Users/matheuscintra/dev/pessoal/open-desktop/dist/Open Desktop.app (local preview; not notarized)
+Closing organization window: unapplied edits are not part of the saved map.
+Backup: /Users/matheuscintra/Library/Application Support/Open Desktop/backups/update.dt8nllfz
+Installed /Users/matheuscintra/Applications/Open Desktop.app
+Release: v0.3.0
+Closing organization window: unapplied edits are not part of the saved map.
+Backup: /Users/matheuscintra/Library/Application Support/Open Desktop/backups/update.6o6gxlxy
+Installed /Users/matheuscintra/Applications/Open Desktop.app
+Closing organization window: unapplied edits are not part of the saved map.
+Backup: /Users/matheuscintra/Library/Application Support/Open Desktop/backups/update.ei1_by_1
+Installed /Users/matheuscintra/Applications/Open Desktop.app

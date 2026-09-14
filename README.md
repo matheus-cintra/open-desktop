@@ -93,7 +93,7 @@ Também são aceitos `right`, `top`, `bottom` e a sintaxe anterior `peer set NOM
 
 **O transporte ainda não é criptografado. Use somente em rede local confiável.** O PIN pareia os dispositivos; não fornece criptografia do tráfego. Execute a mesma versão nas duas máquinas. O protocolo atual é 4; versões de protocolo incompatíveis são rejeitadas.
 
-Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, Windows. O macOS tem apenas a prévia local descrita abaixo. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
+Não há suporte anunciado para outros compositores, configuração Hyprland antiga em `.conf`, múltiplos monitores por máquina, Windows. O suporte macOS é experimental, conforme descrito abaixo. O instalador não altera o firewall automaticamente. Se a descoberta falhar, confira as portas acima e o isolamento de clientes do Wi-Fi.
 
 ## Atualização e remoção
 
@@ -118,7 +118,7 @@ cargo build --release --locked
 
 ## macOS e atividade física
 
-Baixe `open-desktop-macos-arm64.zip` da [release 0.3.0](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.0).
+Baixe `open-desktop-macos-arm64.zip` da [release 0.3.1](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.1).
 Veja [instalação e permissões do Mac](docs/macos.md). O pacote Mac usa assinatura de
 desenvolvimento e não é notarizado. Atualizações no Mac são manuais, pelo `.app`;
 `opendesk update` é suportado somente no Linux.
@@ -129,7 +129,7 @@ grupo input. Para removê-lo: `opendesk uninstall-activity`.
 
 Identidades e pareamentos são preservados. O protocolo 4 é incompatível com as
 versões anteriores: atualize todos os computadores. Consulte as
-[notas e pendências de validação](docs/release-0.3.0.md).
+[notas e pendências de validação](docs/release-0.3.1.md).
 
 ## Desenvolvimento
 

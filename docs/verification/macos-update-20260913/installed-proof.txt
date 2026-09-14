@@ -1,0 +1,8 @@
+Open Desktop update failed: Use latest or a concrete vX.Y.Z release tag
+Command failed: macOS command failed
+invalid_tag_exit=1
+Executable=/Users/matheuscintra/Applications/Open Desktop.app/Contents/MacOS/opendesk
+designated => identifier "dev.mcintra.opendesk" and certificate leaf = H"0f939256b2da742cb81ad8f035a0e668c6526281"
+32318e4eca993360f48d6554e440fe609ff7ee615e54984eff5ab787ea693493  /Users/matheuscintra/Applications/Open Desktop.app/Contents/MacOS/opendesk
+32318e4eca993360f48d6554e440fe609ff7ee615e54984eff5ab787ea693493  /Users/matheuscintra/dev/pessoal/open-desktop/dist/Open Desktop.app/Contents/MacOS/opendesk
+transaction_journal=absent

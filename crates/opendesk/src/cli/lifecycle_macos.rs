@@ -35,10 +35,44 @@ pub fn install(action: &str) -> anyhow::Result<()> {
     }
     bail!("Install the ARM64 app using scripts/install-macos.sh from the source checkout")
 }
-pub fn update(_: Option<&str>) -> anyhow::Result<()> {
-    bail!(
-        "This is a local macOS preview. Build and install the matching Linux/macOS checkout; public updates are not available yet"
-    )
+pub fn update(version: Option<&str>) -> anyhow::Result<()> {
+    let output = Command::new("/usr/bin/mktemp")
+        .args(["-d", "-t", "opendesk-updater"])
+        .output()?;
+    anyhow::ensure!(output.status.success(), "Cannot stage macOS updater");
+    let stage = PathBuf::from(String::from_utf8(output.stdout)?.trim());
+    let result = (|| {
+        let scripts = stage.join("scripts");
+        std::fs::create_dir(&scripts)?;
+        for (name, content) in [
+            (
+                "install-macos.sh",
+                include_str!("../../../../scripts/install-macos.sh"),
+            ),
+            (
+                "macos-update.py",
+                include_str!("../../../../scripts/macos-update.py"),
+            ),
+            (
+                "macos-update-runtime.py",
+                include_str!("../../../../scripts/macos-update-runtime.py"),
+            ),
+            (
+                "macos-update-validation.py",
+                include_str!("../../../../scripts/macos-update-validation.py"),
+            ),
+        ] {
+            std::fs::write(scripts.join(name), content)?;
+        }
+        checked(
+            Command::new("/bin/bash")
+                .arg(scripts.join("install-macos.sh"))
+                .arg("update")
+                .arg(version.unwrap_or("latest")),
+        )
+    })();
+    let _ = std::fs::remove_dir_all(stage);
+    result
 }
 pub fn logs() -> anyhow::Result<()> {
     let log = PathBuf::from(std::env::var_os("HOME").context("HOME not set")?)

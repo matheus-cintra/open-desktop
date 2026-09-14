@@ -2424,7 +2424,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "opendesk"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2450,7 +2450,7 @@ dependencies = [
 
 [[package]]
 name = "opendesk-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "dirs",
  "opendesk-proto",
@@ -2464,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "opendesk-macos"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "cc",
@@ -2477,7 +2477,7 @@ dependencies = [
 
 [[package]]
 name = "opendesk-platform"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "opendesk-proto",
  "serde",
@@ -2485,7 +2485,7 @@ dependencies = [
 
 [[package]]
 name = "opendesk-proto"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "postcard",
  "serde",
@@ -2494,7 +2494,7 @@ dependencies = [
 
 [[package]]
 name = "opendesk-wayland"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "calloop 0.14.4",
  "calloop-wayland-source 0.4.1",
