@@ -47,20 +47,62 @@ pub async fn run() -> anyhow::Result<()> {
         "3" => {
             let current = report().await?;
             for peer in &current.peers {
-                println!("  {}", peer.name);
+                println!(
+                    "  {} ({})",
+                    peer.name,
+                    peer.side.as_deref().unwrap_or("sem borda")
+                );
             }
             prompt("Nome do computador: ")?
         }
         _ => bail!("Opção inválida; execute setup novamente"),
     };
-    super::expect_ok(
-        super::send(IpcRequest::PeerSet {
-            name: name.clone(),
-            side: "all".into(),
-        })
-        .await?,
-    )?;
-    println!("{name} configurado nas quatro bordas. Conclua setup na outra máquina também.");
+    let current = report().await?;
+    let peer = current
+        .peers
+        .iter()
+        .find(|peer| peer.name == name)
+        .context("Computador não encontrado; execute setup e escolha um nome da lista")?;
+    if let Some(side) = &peer.side {
+        println!("{name}: configuração preservada ({side}).");
+    } else {
+        let occupied: Vec<&str> = current
+            .peers
+            .iter()
+            .filter(|peer| peer.name != name)
+            .filter_map(|peer| peer.side.as_deref())
+            .collect();
+        let side = if occupied.is_empty() {
+            "all".to_owned()
+        } else {
+            let available: Vec<&str> = ["left", "right", "top", "bottom"]
+                .into_iter()
+                .filter(|side| !occupied.contains(&"all") && !occupied.contains(side))
+                .collect();
+            if available.is_empty() {
+                bail!(
+                    "Nenhuma borda livre. Ajuste as posições com opendesk peer set <nome> <left|right|top|bottom> e execute setup novamente"
+                );
+            }
+            println!(
+                "Bordas livres: {} (left=esquerda, right=direita, top=acima, bottom=abaixo).",
+                available.join(", ")
+            );
+            let side = prompt("Borda para este computador: ")?;
+            if !available.contains(&side.as_str()) {
+                bail!("Borda inválida ou ocupada; nenhuma posição foi alterada");
+            }
+            side
+        };
+        super::expect_ok(
+            super::send(IpcRequest::PeerSet {
+                name: name.clone(),
+                side: side.clone(),
+            })
+            .await?,
+        )?;
+        println!("{name} configurado ({side}). Conclua setup na outra máquina também.");
+    }
     println!(
         "Empurre o cursor contra uma borda; retorne pela borda de entrada. Ctrl+Alt+Esc libera o controle."
     );

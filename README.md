@@ -32,12 +32,12 @@ curl -fsSL https://github.com/matheus-cintra/open-desktop/releases/latest/downlo
 
 O daemon é instalado sem `sudo` e sem compilar Rust. O instalador verifica o SHA-256 do pacote, instala em `~/.local/bin`, habilita o início automático e configura a integração do Hyprland. Ao terminar, o instalador abre automaticamente o assistente, que inicia o serviço e orienta o pareamento. Sem terminal interativo, execute `opendesk setup` depois. Adicione `~/.local/bin` ao `PATH` para usar apenas `opendesk`.
 
-Prefere inspecionar o script? Baixe o `install.sh` da release, leia e execute `sh install.sh`. Para uma versão específica: `sh install.sh v0.3.1`.
+Prefere inspecionar o script? Baixe o `install.sh` da release, leia e execute `sh install.sh`. Para uma versão específica: `sh install.sh v0.3.2`.
 
 ### macOS / Apple Silicon
 
 Baixe `open-desktop-macos-arm64.zip` e `SHA256SUMS-macos` da
-[release 0.3.1](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.1).
+[release 0.3.2](https://github.com/matheus-cintra/open-desktop/releases/tag/v0.3.2).
 Na pasta dos downloads, verifique o pacote antes de extrair:
 
 ```sh
@@ -88,7 +88,7 @@ compartilhamento ativo. O clipboard sincroniza mesmo quando o cursor está local
 | Diagnosticar | `opendesk doctor` |
 | Acompanhar logs | `opendesk logs` — Ctrl+C fecha os logs |
 | Atualizar | `opendesk update` |
-| Escolher uma versão | `opendesk update v0.3.1` |
+| Escolher uma versão | `opendesk update v0.3.2` |
 | Desinstalar, preservando dados | `opendesk uninstall` |
 
 Pausar impede novas passagens; não desliga a sincronização do clipboard. Use `stop` para desligar o serviço inteiro. `enable` e `disable` continuam disponíveis como aliases de `resume` e `pause`.
@@ -129,7 +129,7 @@ No Linux e no Mac com a versão 0.3.1 ou posterior:
 ```sh
 opendesk update          # release mais recente
 opendesk update latest
-opendesk update v0.3.1   # versão explícita; permite reinstalar
+opendesk update v0.3.2   # versão explícita; permite reinstalar
 opendesk uninstall
 ```
 

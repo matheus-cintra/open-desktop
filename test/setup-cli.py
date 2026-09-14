@@ -17,7 +17,7 @@ BINARY = ROOT / 'target/debug/opendesk'
 PEER = dict(name='notebook', side=None, connected=True, address='192.0.2.2:47820')
 
 class Setup(unittest.TestCase):
-    def scenario(self, mode, choices):
+    def scenario(self, mode, choices, peers=None):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory)
             stub = stage / 'systemctl'
@@ -48,7 +48,7 @@ class Setup(unittest.TestCase):
                             if mode == 'receive' and status_calls >= 6:
                                 paired = True
                             response = {'Status': dict(name='desktop', peer_id='00', state='Idle', enabled=True,
-                                peers=[PEER] if paired else [],
+                                peers=(peers if peers is not None else [PEER]) if paired else [],
                                 pending_pin='123456' if mode == 'receive' and 3 <= status_calls < 6 else None)}
                         elif request == 'Discover':
                             response = {'Discovered': [dict(name='notebook', peer_id='11', address='192.0.2.2:47820', version='0.1.0', paired=False)]}
@@ -109,6 +109,38 @@ class Setup(unittest.TestCase):
         code, output, requests = self.scenario('existing', ['3', 'notebook'])
         self.assertEqual(code, 0, output)
         self.assertNotIn({'Pair': {'name': 'notebook'}}, requests)
+
+    def test_existing_multi_peer_preserves_placement(self):
+        peers = [dict(PEER, side='left'), dict(PEER, name='macbook', side='right')]
+        code, output, requests = self.scenario('existing', ['3', 'notebook'], peers)
+        self.assertEqual(code, 0, output)
+        self.assertIn('configuração preservada (left)', output)
+        self.assertFalse(any(isinstance(r, dict) and 'PeerSet' in r for r in requests))
+
+    def test_unplaced_peer_uses_free_edge(self):
+        peers = [PEER, dict(PEER, name='macbook', side='right')]
+        code, output, requests = self.scenario('existing', ['3', 'notebook', 'left'], peers)
+        self.assertEqual(code, 0, output)
+        self.assertIn({'PeerSet': {'name': 'notebook', 'side': 'left'}}, requests)
+
+    def test_occupied_edge_is_not_reassigned(self):
+        peers = [PEER, dict(PEER, name='macbook', side='right')]
+        code, output, requests = self.scenario('existing', ['3', 'notebook', 'right'], peers)
+        self.assertNotEqual(code, 0, output)
+        self.assertFalse(any(isinstance(r, dict) and 'PeerSet' in r for r in requests))
+
+    def test_all_occupied_explains_recovery(self):
+        peers = [PEER, dict(PEER, name='macbook', side='all')]
+        code, output, requests = self.scenario('existing', ['3', 'notebook'], peers)
+        self.assertNotEqual(code, 0, output)
+        self.assertIn('Nenhuma borda livre', output)
+        self.assertFalse(any(isinstance(r, dict) and 'PeerSet' in r for r in requests))
+
+    def test_unknown_peer_does_not_change_placement(self):
+        code, output, requests = self.scenario('existing', ['3', 'unknown'])
+        self.assertNotEqual(code, 0, output)
+        self.assertIn('Computador não encontrado', output)
+        self.assertFalse(any(isinstance(r, dict) and 'PeerSet' in r for r in requests))
 
     def test_invalid_selection_does_not_pair(self):
         code, output, requests = self.scenario('initiate', ['1', '9'])
